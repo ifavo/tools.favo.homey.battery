@@ -1,0 +1,28 @@
+{
+  "id": "tools.favo.homey.battery",
+  "version": "1.0.0",
+  "compatibility": ">=12.4.0",
+  "sdk": 3,
+  "platforms": [
+    "local"
+  ],
+  "name": {
+    "en": "Kostal Battery"
+  },
+  "description": {
+    "en": "Adds support for Kostal Plenticore / PIKO IQ inverters to control battery charging."
+  },
+  "category": [
+    "tools"
+  ],
+  "permissions": [],
+  "images": {
+    "small": "/assets/images/small.png",
+    "large": "/assets/images/large.png",
+    "xlarge": "/assets/images/xlarge.png"
+  },
+  "author": {
+    "name": "favo",
+    "email": "tools@favo.org"
+      }
+    }

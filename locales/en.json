@@ -1,0 +1,48 @@
+{
+  "drivers": {
+    "kostal-battery": {
+      "name": {
+        "en": "Kostal Battery"
+      },
+      "pair": {
+        "configure": {
+          "title": {
+            "en": "Configure Inverter Connection"
+          }
+        }
+      }
+    }
+  },
+  "capabilities": {
+    "measure_battery": {
+      "name": {
+        "en": "State of Charge"
+      }
+    },
+    "measure_power": {
+      "name": {
+        "en": "Battery Power"
+      }
+    },
+    "measure_voltage": {
+      "name": {
+        "en": "Battery Voltage"
+      }
+    },
+    "measure_current": {
+      "name": {
+        "en": "Battery Current"
+      }
+    },
+    "onoff": {
+      "name": {
+        "en": "Grid Charging"
+      }
+    },
+    "next_charging_times": {
+      "name": {
+        "en": "Next Charging Times"
+      }
+    }
+  }
+}

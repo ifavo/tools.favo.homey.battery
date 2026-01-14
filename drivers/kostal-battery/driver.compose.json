@@ -1,0 +1,235 @@
+{
+  "id": "kostal-battery",
+  "name": {
+    "en": "Kostal Battery"
+  },
+  "class": "solarpanel",
+  "capabilities": [
+    "onoff",
+    "measure_battery",
+    "measure_power",
+    "measure_voltage",
+    "measure_current",
+    "next_charging_times"
+  ],
+  "capabilitiesOptions": {
+    "onoff": {
+      "title": {
+        "en": "Grid Charging",
+        "de": "Netzladung"
+      }
+    },
+    "measure_battery": {
+      "title": {
+        "en": "State of Charge",
+        "de": "Ladezustand"
+      },
+      "units": {
+        "en": "%"
+      }
+    },
+    "measure_power": {
+      "title": {
+        "en": "Battery Power",
+        "de": "Batterieleistung"
+      },
+      "units": {
+        "en": "W"
+      }
+    },
+    "measure_voltage": {
+      "title": {
+        "en": "Battery Voltage",
+        "de": "Batteriespannung"
+      },
+      "units": {
+        "en": "V"
+      }
+    },
+    "measure_current": {
+      "title": {
+        "en": "Battery Current",
+        "de": "Batteriestrom"
+      },
+      "units": {
+        "en": "A"
+      }
+    },
+    "next_charging_times": {
+      "title": {
+        "en": "Next Charging Times",
+        "de": "Nächste Ladezeiten"
+      }
+    }
+  },
+  "images": {
+    "small": "/drivers/kostal-battery/assets/images/small.svg",
+    "large": "/drivers/kostal-battery/assets/images/large.svg",
+    "xlarge": "/drivers/kostal-battery/assets/images/xlarge.svg"
+  },
+  "settings": [
+    {
+      "type": "group",
+      "label": {
+        "en": "Connection",
+        "de": "Verbindung"
+      },
+      "children": [
+        {
+          "id": "ip",
+          "type": "text",
+          "label": {
+            "en": "Inverter IP Address",
+            "de": "Wechselrichter IP-Adresse"
+          },
+          "value": "",
+          "hint": {
+            "en": "IP address of your Kostal inverter (e.g., 192.168.1.100)"
+          }
+        },
+        {
+          "id": "password",
+          "type": "password",
+          "label": {
+            "en": "Password",
+            "de": "Passwort"
+          },
+          "value": "",
+          "hint": {
+            "en": "Password for the 'user' (Anlagenbetreiber) account"
+          }
+        }
+      ]
+    },
+    {
+      "type": "group",
+      "label": {
+        "en": "Charging Settings",
+        "de": "Ladeeinstellungen"
+      },
+      "children": [
+        {
+          "id": "min_soc",
+          "type": "number",
+          "label": {
+            "en": "Minimum SoC (%)",
+            "de": "Minimaler Ladezustand (%)"
+          },
+          "value": 10,
+          "min": 5,
+          "max": 50,
+          "hint": {
+            "en": "Battery will not discharge below this level"
+          }
+        },
+        {
+          "id": "max_soc",
+          "type": "number",
+          "label": {
+            "en": "Target SoC (%)",
+            "de": "Ziel-Ladezustand (%)"
+          },
+          "value": 80,
+          "min": 50,
+          "max": 100,
+          "hint": {
+            "en": "Target state of charge when grid charging"
+          }
+        },
+        {
+          "id": "watts",
+          "type": "number",
+          "label": {
+            "en": "Charging Power (W)",
+            "de": "Ladeleistung (W)"
+          },
+          "value": 4000,
+          "min": 500,
+          "max": 10000,
+          "hint": {
+            "en": "Power to draw from grid for charging"
+          }
+        }
+      ]
+    },
+    {
+      "type": "group",
+      "label": {
+        "en": "Low Price Charging",
+        "de": "Niedrigpreis-Ladung"
+      },
+      "children": [
+        {
+          "id": "enable_low_price_charging",
+          "type": "checkbox",
+          "label": {
+            "en": "Enable Low Price Charging",
+            "de": "Niedrigpreis-Ladung aktivieren"
+          },
+          "value": false,
+          "hint": {
+            "en": "Automatically charge during cheapest electricity price blocks"
+          }
+        },
+        {
+          "id": "low_price_blocks_count",
+          "type": "number",
+          "label": {
+            "en": "Cheapest Blocks (charge)",
+            "de": "Günstigste Blöcke (laden)"
+          },
+          "value": 8,
+          "min": 0,
+          "max": 96,
+          "hint": {
+            "en": "15-min blocks per day set to grid charge (value 3). Default: 8 = 2 hours"
+          }
+        },
+        {
+          "id": "expensive_blocks_count",
+          "type": "number",
+          "label": {
+            "en": "Expensive Blocks (avoid)",
+            "de": "Teure Blöcke (vermeiden)"
+          },
+          "value": 8,
+          "min": 0,
+          "max": 96,
+          "hint": {
+            "en": "15-min blocks per day set to avoid grid (value 0). Default: 8 = 2 hours"
+          }
+        },
+        {
+          "id": "price_timezone",
+          "type": "text",
+          "label": {
+            "en": "Timezone",
+            "de": "Zeitzone"
+          },
+          "value": "",
+          "hint": {
+            "en": "Timezone for price time formatting (e.g., Europe/Berlin). Leave empty to auto-detect."
+          }
+        }
+      ]
+    }
+  ],
+  "pair": [
+    {
+      "id": "configure"
+    },
+    {
+      "id": "list_devices",
+      "template": "list_devices",
+      "navigation": {
+        "prev": "configure",
+        "next": "add_devices"
+      }
+    },
+    {
+      "id": "add_devices",
+      "template": "add_devices"
+    }
+  ]
+}
+

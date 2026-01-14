@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Configure Kostal Inverter</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      margin: 0;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    .container {
+      max-width: 400px;
+      margin: 0 auto;
+    }
+    h1 {
+      font-size: 1.5em;
+      margin-bottom: 0.5em;
+      color: #333;
+    }
+    p {
+      color: #666;
+      margin-bottom: 1.5em;
+      font-size: 0.9em;
+    }
+    .form-group {
+      margin-bottom: 1em;
+    }
+    label {
+      display: block;
+      margin-bottom: 0.5em;
+      font-weight: 500;
+      color: #333;
+    }
+    input {
+      width: 100%;
+      padding: 12px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      font-size: 16px;
+      transition: border-color 0.2s;
+    }
+    input:focus {
+      outline: none;
+      border-color: #007aff;
+    }
+    .hint {
+      font-size: 0.8em;
+      color: #888;
+      margin-top: 0.3em;
+    }
+    button {
+      width: 100%;
+      padding: 14px;
+      background: #007aff;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 1em;
+      transition: background 0.2s;
+    }
+    button:hover {
+      background: #0066dd;
+    }
+    button:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+    }
+    .status {
+      margin-top: 1em;
+      padding: 12px;
+      border-radius: 8px;
+      font-size: 0.9em;
+    }
+    .status.loading {
+      background: #e3f2fd;
+      color: #1565c0;
+    }
+    .status.success {
+      background: #e8f5e9;
+      color: #2e7d32;
+    }
+    .status.error {
+      background: #ffebee;
+      color: #c62828;
+    }
+    .battery-info {
+      margin-top: 1em;
+      padding: 12px;
+      background: white;
+      border-radius: 8px;
+      border: 1px solid #ddd;
+    }
+    .battery-info h3 {
+      margin: 0 0 0.5em 0;
+      font-size: 1em;
+      color: #333;
+    }
+    .battery-stat {
+      display: flex;
+      justify-content: space-between;
+      padding: 4px 0;
+      font-size: 0.9em;
+    }
+    .battery-stat .label {
+      color: #666;
+    }
+    .battery-stat .value {
+      font-weight: 500;
+      color: #333;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🔋 Configure Kostal Inverter</h1>
+    <p>Enter the connection details for your Kostal Plenticore or PIKO IQ inverter.</p>
+
+    <div class="form-group">
+      <label for="ip">Inverter IP Address</label>
+      <input type="text" id="ip" placeholder="192.168.1.100" autocomplete="off">
+      <div class="hint">The IP address of your inverter on your local network</div>
+    </div>
+
+    <div class="form-group">
+      <label for="password">Password</label>
+      <input type="password" id="password" placeholder="Enter password">
+      <div class="hint">Password for the 'user' (Anlagenbetreiber) account</div>
+    </div>
+
+    <button id="connect">Connect</button>
+
+    <div id="status" class="status" style="display: none;"></div>
+
+    <div id="battery-info" class="battery-info" style="display: none;">
+      <h3>Battery Status</h3>
+      <div class="battery-stat">
+        <span class="label">State of Charge</span>
+        <span class="value" id="soc">-</span>
+      </div>
+      <div class="battery-stat">
+        <span class="label">Power</span>
+        <span class="value" id="power">-</span>
+      </div>
+      <div class="battery-stat">
+        <span class="label">Voltage</span>
+        <span class="value" id="voltage">-</span>
+      </div>
+      <div class="battery-stat">
+        <span class="label">Current</span>
+        <span class="value" id="current">-</span>
+      </div>
+      <div class="battery-stat">
+        <span class="label">Cycles</span>
+        <span class="value" id="cycles">-</span>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const ipInput = document.getElementById('ip');
+    const passwordInput = document.getElementById('password');
+    const connectBtn = document.getElementById('connect');
+    const statusDiv = document.getElementById('status');
+    const batteryInfoDiv = document.getElementById('battery-info');
+
+    function showStatus(message, type) {
+      statusDiv.textContent = message;
+      statusDiv.className = 'status ' + type;
+      statusDiv.style.display = 'block';
+    }
+
+    function showBatteryInfo(status) {
+      document.getElementById('soc').textContent = status.soc.toFixed(1) + '%';
+      document.getElementById('power').textContent = status.power.toFixed(1) + ' W';
+      document.getElementById('voltage').textContent = status.voltage.toFixed(1) + ' V';
+      document.getElementById('current').textContent = status.current.toFixed(2) + ' A';
+      document.getElementById('cycles').textContent = status.cycles;
+      batteryInfoDiv.style.display = 'block';
+    }
+
+    connectBtn.addEventListener('click', async () => {
+      const ip = ipInput.value.trim();
+      const password = passwordInput.value;
+
+      if (!ip) {
+        showStatus('Please enter the inverter IP address', 'error');
+        return;
+      }
+
+      if (!password) {
+        showStatus('Please enter the password', 'error');
+        return;
+      }
+
+      connectBtn.disabled = true;
+      showStatus('Connecting to inverter...', 'loading');
+      batteryInfoDiv.style.display = 'none';
+
+      try {
+        const result = await Homey.emit('configure', { ip, password });
+
+        if (result.success) {
+          showStatus('Connection successful! Adding device...', 'success');
+          showBatteryInfo(result.status);
+
+          // Small delay before showing devices
+          setTimeout(() => {
+            Homey.showView('list_devices');
+          }, 1500);
+        } else {
+          showStatus('Connection failed: ' + (result.error || 'Unknown error'), 'error');
+          connectBtn.disabled = false;
+        }
+      } catch (error) {
+        showStatus('Error: ' + error.message, 'error');
+        connectBtn.disabled = false;
+      }
+    });
+
+    // Allow Enter key to submit
+    passwordInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        connectBtn.click();
+      }
+    });
+  </script>
+</body>
+</html>
+
