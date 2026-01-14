@@ -6,6 +6,9 @@ import {
   fetchBatteryStatus,
   setChargingSchedule,
   setChargingOff,
+  buildSchedulePayload,
+  buildChargingOffPayload,
+  fetchSettings,
 } from '../../logic/kostalApi/apiClient';
 import {
   buildPriceBasedSchedule,
@@ -16,7 +19,7 @@ import {
   SCHEDULE_VALUE_AVOID,
   type DaySchedule,
 } from '../../logic/kostalApi/scheduleBuilder';
-import type { BatteryStatus, ChargingConfig } from '../../logic/kostalApi/types';
+import type { BatteryStatus, ChargingConfig, SettingsModule } from '../../logic/kostalApi/types';
 import { SmardPriceSource } from '../../logic/lowPrice/sources/smard';
 import type { PriceDataSource } from '../../logic/lowPrice/priceSource';
 import type { PriceBlock } from '../../logic/lowPrice/types';
@@ -59,7 +62,7 @@ class KostalBatteryDevice extends Homey.Device {
     const password = this.getSetting('password') as string;
 
     if (!ip || !password) {
-      this.setUnavailable('Inverter IP or password not configured').catch(() => {});
+      this.setUnavailable('Inverter IP or password not configured').catch(() => { });
       return;
     }
 
@@ -70,8 +73,9 @@ class KostalBatteryDevice extends Homey.Device {
     this.priceSource = new SmardPriceSource('DE-LU');
     this.log('[PRICE] Using SMARD API as price data source');
 
-    // Register capability listeners
-    this.registerCapabilityListener('onoff', this.onCapabilityOnOff.bind(this));
+    // Initialize last_api_update capability with default value
+    // Setting it even if it exists is safe and ensures it's visible in Homey
+    await this.setCapabilityValue('last_api_update', 'Never').catch(() => { });
 
     // Start polling
     await this.startPolling();
@@ -103,6 +107,25 @@ class KostalBatteryDevice extends Homey.Device {
     changedKeys: string[];
   }): Promise<string | void> {
     this.log('[SETTINGS] Settings changed:', event.changedKeys);
+
+    await this.logSettingsChangeDetails(event);
+
+    // Validate SoC settings: min must be 5-100 (step 5), max must be >= min
+    if (event.changedKeys.includes('min_soc') || event.changedKeys.includes('max_soc')) {
+      const minSocRaw = event.newSettings.min_soc ?? this.getSetting('min_soc');
+      const maxSocRaw = event.newSettings.max_soc ?? this.getSetting('max_soc');
+      const minSoc = Number(minSocRaw);
+      const maxSoc = Number(maxSocRaw);
+
+      const isMinStepValid = minSoc >= 5 && minSoc <= 100 && minSoc % 5 === 0;
+      if (!isMinStepValid) {
+        return 'Minimum SoC must be between 5 and 100 in steps of 5.';
+      }
+
+      if (maxSoc < minSoc) {
+        return 'Target SoC must be greater than or equal to Minimum SoC.';
+      }
+    }
 
     // Update session manager if credentials changed
     if (event.changedKeys.includes('ip') || event.changedKeys.includes('password')) {
@@ -141,7 +164,7 @@ class KostalBatteryDevice extends Homey.Device {
 
       const enabled = event.newSettings.enable_low_price_charging as boolean ?? this.getSetting('enable_low_price_charging');
       if (enabled) {
-        await this.updateScheduleFromPrices();
+        await this.updateScheduleFromPrices(event.newSettings);
       }
     }
   }
@@ -199,7 +222,7 @@ class KostalBatteryDevice extends Homey.Device {
     } catch (error: unknown) {
       const errorMessage = extractErrorMessage(error);
       this.error('[STATUS] Error refreshing status:', errorMessage);
-      await this.setUnavailable(`Error: ${errorMessage.substring(0, 50)}`).catch(() => {});
+      await this.setUnavailable(`Error: ${errorMessage.substring(0, 50)}`).catch(() => { });
     }
   }
 
@@ -207,34 +230,14 @@ class KostalBatteryDevice extends Homey.Device {
    * Update device capabilities from battery status
    */
   async updateCapabilities(status: BatteryStatus): Promise<void> {
-    await this.setCapabilityValue('measure_battery', status.soc).catch(() => {});
-    await this.setCapabilityValue('measure_power', status.power).catch(() => {});
-    await this.setCapabilityValue('measure_voltage', status.voltage).catch(() => {});
-    await this.setCapabilityValue('measure_current', status.current).catch(() => {});
+    await this.setCapabilityValue('measure_battery', status.soc).catch(() => { });
+    await this.setCapabilityValue('measure_power', status.power).catch(() => { });
+    await this.setCapabilityValue('measure_voltage', status.voltage).catch(() => { });
+    await this.setCapabilityValue('measure_current', status.current).catch(() => { });
+    // Reflect charging state: power > 0 means charging, <= 0 means not charging
+    const isCharging = status.power > 0;
+    await this.setCapabilityValue('onoff', isCharging).catch(() => { });
     // Note: cycles data is fetched but not displayed (no standard Homey capability)
-  }
-
-  /**
-   * Handle onoff capability change (manual user control)
-   */
-  async onCapabilityOnOff(value: boolean): Promise<void> {
-    this.log(`[ONOFF] Manual control: ${value}`);
-
-    // Set manual override timestamp
-    this.manualOverrideTimestamp = Date.now();
-
-    try {
-      if (value) {
-        // When manually turning on, apply current schedule immediately
-        await this.updateScheduleFromPrices();
-      } else {
-        await this.setChargingOff();
-      }
-    } catch (error: unknown) {
-      const errorMessage = extractErrorMessage(error);
-      this.error('[ONOFF] Failed to set charging state:', errorMessage);
-      throw error;
-    }
   }
 
   /**
@@ -256,14 +259,23 @@ class KostalBatteryDevice extends Homey.Device {
     const ip = this.getSetting('ip') as string;
     const minSoc = this.getSetting('min_soc') as number || 10;
 
+    const desiredSettings = buildChargingOffPayload(minSoc);
+    const shouldApply = await this.isSettingsChangeNeeded(ip, desiredSettings);
+    if (!shouldApply) {
+      this.currentSchedule = undefined;
+      this.currentConfig = undefined;
+      this.log('[CHARGING] Settings already match, skipping API call');
+      return;
+    }
+
     await this.sessionManager.executeWithAuthRecovery(
       (sessionId) => setChargingOff(ip, sessionId, minSoc),
       'CHARGING_OFF',
     );
 
-    await this.setCapabilityValue('onoff', false).catch(() => {});
     this.currentSchedule = undefined;
     this.currentConfig = undefined;
+    await this.updateLastApiUpdateTime();
     this.log('[CHARGING] Time control disabled');
   }
 
@@ -301,15 +313,203 @@ class KostalBatteryDevice extends Homey.Device {
     }
   }
 
+  private resolveTimezone(value: unknown): string {
+    const timezone = typeof value === 'string' ? value.trim() : '';
+    return timezone || this.homey.clock.getTimezone();
+  }
+
+  private async logSettingsChangeDetails(event: {
+    oldSettings: Record<string, unknown>;
+    newSettings: Record<string, unknown>;
+    changedKeys: string[];
+  }): Promise<void> {
+    const ip = this.getSetting('ip') as string;
+    if (!ip || event.changedKeys.length === 0) {
+      return;
+    }
+
+    const inverterSettingMap: Record<string, string[]> = {
+      min_soc: ['Battery:MinSoc'],
+      max_soc: ['EnergyMgmt:TimedBatCharge:Soc', 'EnergyMgmt:TimedBatCharge:WD_Soc'],
+      watts: ['EnergyMgmt:TimedBatCharge:GridPower', 'EnergyMgmt:TimedBatCharge:WD_GridPower'],
+    };
+
+    const settingIds = event.changedKeys
+      .flatMap((key) => inverterSettingMap[key] || [])
+      .filter((id, index, list) => list.indexOf(id) === index);
+
+    if (settingIds.length === 0) {
+      this.log('[SETTINGS] No inverter settings to compare for changed keys');
+      return;
+    }
+
+    try {
+      const currentModules = await this.sessionManager.executeWithAuthRecovery(
+        (sessionId) => fetchSettings(ip, sessionId, [
+          {
+            moduleid: 'devices:local',
+            settingids: settingIds,
+          },
+        ]),
+        'SETTINGS_READ',
+      );
+
+      const currentSettings = currentModules[0]?.settings ?? [];
+      const currentMap = new Map(currentSettings.map((setting) => [setting.id, setting.value]));
+
+      for (const key of event.changedKeys) {
+        const desiredValue = event.newSettings[key];
+        const mappedIds = inverterSettingMap[key];
+        if (!mappedIds) {
+          this.log(`[SETTINGS] ${key}: desired=${String(desiredValue)} (no inverter mapping)`);
+          continue;
+        }
+
+        const currentValues = mappedIds.map((id) => `${id}=${currentMap.get(id) ?? 'missing'}`).join(', ');
+        this.log(`[SETTINGS] ${key}: desired=${String(desiredValue)} inverter={${currentValues}}`);
+      }
+    } catch (error: unknown) {
+      const errorMessage = extractErrorMessage(error);
+      this.error('[SETTINGS] Failed to read current inverter settings:', errorMessage);
+    }
+  }
+
+  private normalizeSettingValue(value: string): string | number {
+    const trimmed = value.trim();
+    const isNumeric = /^-?\d+(\.\d+)?$/.test(trimmed) && trimmed.length <= 10;
+    if (isNumeric) {
+      return Number(trimmed);
+    }
+    return trimmed;
+  }
+
+  private areSettingValuesEqual(desired: string, current: string): boolean {
+    const desiredValue = this.normalizeSettingValue(desired);
+    const currentValue = this.normalizeSettingValue(current);
+    if (typeof desiredValue === 'number' && typeof currentValue === 'number') {
+      return desiredValue === currentValue;
+    }
+    return String(desiredValue) === String(currentValue);
+  }
+
+  private async isSettingsChangeNeeded(
+    ip: string,
+    desiredModules: SettingsModule[],
+  ): Promise<boolean> {
+    const query = desiredModules.map((module) => ({
+      moduleid: module.moduleid,
+      settingids: module.settings.map((setting) => setting.id),
+    }));
+
+    const currentModules = await this.sessionManager.executeWithAuthRecovery(
+      (sessionId) => fetchSettings(ip, sessionId, query),
+      'SETTINGS_CHECK',
+    );
+
+    const differences: Array<{
+      moduleid: string;
+      id: string;
+      desired: string;
+      current: string;
+    }> = [];
+
+    let needsChange = false;
+
+    for (const desiredModule of desiredModules) {
+      const currentModule = currentModules.find((module) => module.moduleid === desiredModule.moduleid);
+      if (!currentModule) {
+        for (const desiredSetting of desiredModule.settings) {
+          differences.push({
+            moduleid: desiredModule.moduleid,
+            id: desiredSetting.id,
+            desired: desiredSetting.value,
+            current: 'missing',
+          });
+        }
+        needsChange = true;
+        continue;
+      }
+
+      for (const desiredSetting of desiredModule.settings) {
+        const currentSetting = currentModule.settings?.find((setting) => setting.id === desiredSetting.id);
+        if (!currentSetting) {
+          differences.push({
+            moduleid: desiredModule.moduleid,
+            id: desiredSetting.id,
+            desired: desiredSetting.value,
+            current: 'missing',
+          });
+          needsChange = true;
+          continue;
+        }
+
+        if (!this.areSettingValuesEqual(desiredSetting.value, currentSetting.value)) {
+          differences.push({
+            moduleid: desiredModule.moduleid,
+            id: desiredSetting.id,
+            desired: desiredSetting.value,
+            current: currentSetting.value,
+          });
+          needsChange = true;
+        }
+      }
+    }
+
+    if (differences.length > 0) {
+      const diffText = differences
+        .map((diff) => `${diff.moduleid}.${diff.id}: ${diff.current} -> ${diff.desired}`)
+        .join(', ');
+      this.log(`[SETTINGS_CHECK] Differences detected: ${diffText}`);
+    } else {
+      this.log('[SETTINGS_CHECK] No differences detected');
+    }
+
+    return needsChange;
+  }
+
+  /**
+   * Update the last API update time capability with current timestamp
+   */
+  async updateLastApiUpdateTime(): Promise<void> {
+    try {
+      const timezone = this.resolveTimezone(this.getSetting('price_timezone'));
+      const now = new Date();
+
+      // Format timestamp using the correct timezone and as ISO string (without ms and Z)
+      const dateInTz = new Date(now.toLocaleString('en-US', { timeZone: timezone }));
+      const iso = dateInTz.toISOString();
+      const formattedTime = iso.slice(0, 19).replace('T', ' ');
+
+      await this.setCapabilityValue('last_api_update', formattedTime);
+
+      const triggerCard = this.homey.flow.getDeviceTriggerCard('last_api_update_changed');
+      await triggerCard.trigger(this, { last_api_update: formattedTime });
+
+      this.log(`[API_UPDATE] Last API update time set to: ${formattedTime}`);
+    } catch (error: unknown) {
+      const errorMessage = extractErrorMessage(error);
+      this.error('[API_UPDATE] Failed to update last API update time:', errorMessage);
+    }
+  }
+
   /**
    * Update inverter schedule based on current prices
    */
-  async updateScheduleFromPrices(): Promise<void> {
+  async updateScheduleFromPrices(
+    settingsOverride: Partial<Record<string, unknown>> = {},
+  ): Promise<void> {
     try {
-      const enableLowPrice = this.getSetting('enable_low_price_charging') as boolean;
-      const cheapestBlocksCount = this.getSetting('low_price_blocks_count') as number || 8;
-      const expensiveBlocksCount = this.getSetting('expensive_blocks_count') as number || 8;
-      const timezone = this.getSetting('price_timezone') as string || this.homey.clock.getTimezone();
+      const enableLowPrice = (settingsOverride.enable_low_price_charging
+        ?? this.getSetting('enable_low_price_charging')) as boolean;
+      const cheapestBlocksCount = Number(
+        settingsOverride.low_price_blocks_count ?? this.getSetting('low_price_blocks_count') ?? 8,
+      );
+      const expensiveBlocksCount = Number(
+        settingsOverride.expensive_blocks_count ?? this.getSetting('expensive_blocks_count') ?? 8,
+      );
+      const timezone = this.resolveTimezone(
+        settingsOverride.price_timezone ?? this.getSetting('price_timezone'),
+      );
 
       this.log(`[PRICE] Fetching prices... (cheapest=${cheapestBlocksCount}, expensive=${expensiveBlocksCount}, tz=${timezone})`);
 
@@ -361,7 +561,7 @@ class KostalBatteryDevice extends Homey.Device {
         locale: 'de-DE',
         timezone,
       });
-      await this.setCapabilityValue('next_charging_times', nextTimesText).catch(() => {});
+      await this.setCapabilityValue('next_charging_times', nextTimesText).catch(() => { });
 
       // Only update schedule if feature is enabled
       if (!enableLowPrice) {
@@ -382,22 +582,25 @@ class KostalBatteryDevice extends Homey.Device {
       const dayNames = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const;
       const todayDayName = dayNames[new Date().getDay()];
       const todaySchedule = newSchedule[todayDayName];
-      this.log(`[SCHEDULE] ${todayDayName.toUpperCase()}: ${countChars(todaySchedule, SCHEDULE_VALUE_CHARGE)} charge blocks, ${countChars(todaySchedule, SCHEDULE_VALUE_AVOID)} avoid blocks, ${countChars(todaySchedule, SCHEDULE_VALUE_NORMAL)} normal blocks`);
+      const chargeCount = countChars(todaySchedule, SCHEDULE_VALUE_CHARGE);
+      const avoidCount = countChars(todaySchedule, SCHEDULE_VALUE_AVOID);
+      const normalCount = countChars(todaySchedule, SCHEDULE_VALUE_NORMAL);
+      this.log(`[SCHEDULE] ${todayDayName.toUpperCase()}: ${chargeCount} charge blocks, ${avoidCount} avoid blocks, ${normalCount} normal blocks`);
 
       // Build new config
       const ip = this.getSetting('ip') as string;
       const newConfig: ChargingConfig = {
-        soc: this.getSetting('max_soc') as number || 80,
-        gridPower: this.getSetting('watts') as number || 4000,
-        minSoc: this.getSetting('min_soc') as number || 10,
+        soc: Number(settingsOverride.max_soc ?? this.getSetting('max_soc') ?? 80),
+        gridPower: Number(settingsOverride.watts ?? this.getSetting('watts') ?? 4000),
+        minSoc: Number(settingsOverride.min_soc ?? this.getSetting('min_soc') ?? 10),
       };
 
       // Check if schedule or config changed
       const scheduleChanged = !this.currentSchedule || schedulesAreDifferent(this.currentSchedule, newSchedule);
-      const configChanged = !this.currentConfig ||
-        this.currentConfig.soc !== newConfig.soc ||
-        this.currentConfig.gridPower !== newConfig.gridPower ||
-        this.currentConfig.minSoc !== newConfig.minSoc;
+      const configChanged = !this.currentConfig
+        || this.currentConfig.soc !== newConfig.soc
+        || this.currentConfig.gridPower !== newConfig.gridPower
+        || this.currentConfig.minSoc !== newConfig.minSoc;
 
       if (!scheduleChanged && !configChanged) {
         this.log('[SCHEDULE] No changes detected, skipping API call (avoiding solar pause)');
@@ -412,6 +615,15 @@ class KostalBatteryDevice extends Homey.Device {
 
       this.log(`[SCHEDULE] Applying to inverter... (soc=${newConfig.soc}%, power=${newConfig.gridPower}W, minSoc=${newConfig.minSoc}%)`);
 
+      const desiredSettings = buildSchedulePayload(newConfig, newSchedule);
+      const shouldApply = await this.isSettingsChangeNeeded(ip, desiredSettings);
+      if (!shouldApply) {
+        this.currentSchedule = newSchedule;
+        this.currentConfig = newConfig;
+        this.log('[SCHEDULE] Inverter settings already match, skipping API call');
+        return;
+      }
+
       await this.sessionManager.executeWithAuthRecovery(
         (sessionId) => setChargingSchedule(ip, sessionId, newConfig, newSchedule),
         'SCHEDULE',
@@ -419,14 +631,14 @@ class KostalBatteryDevice extends Homey.Device {
 
       this.currentSchedule = newSchedule;
       this.currentConfig = newConfig;
-      await this.setCapabilityValue('onoff', true).catch(() => {});
+      await this.updateLastApiUpdateTime();
 
       this.log(`[SCHEDULE] Successfully applied: ${formatScheduleForLog(newSchedule)}`);
 
     } catch (error: unknown) {
       const errorMessage = extractErrorMessage(error);
       this.error('[SCHEDULE] Error updating schedule:', errorMessage);
-      await this.setCapabilityValue('next_charging_times', `Error: ${errorMessage.substring(0, 30)}`).catch(() => {});
+      await this.setCapabilityValue('next_charging_times', `Error: ${errorMessage.substring(0, 30)}`).catch(() => { });
     }
   }
 

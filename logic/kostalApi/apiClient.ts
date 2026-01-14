@@ -235,6 +235,17 @@ export function buildChargingOffPayload(minSoc: number = 15): SettingsModule[] {
 }
 
 /**
+ * Fetch settings values from the inverter
+ */
+export async function fetchSettings(
+  ip: string,
+  sessionId: string,
+  modules: Array<{ moduleid: string; settingids: string[] }>,
+): Promise<SettingsModule[]> {
+  return kostalRequest<SettingsModule[]>(ip, sessionId, 'POST', '/settings', modules);
+}
+
+/**
  * Turn grid charging ON
  */
 export async function setChargingOn(

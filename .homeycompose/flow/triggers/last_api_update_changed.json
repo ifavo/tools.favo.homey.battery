@@ -1,0 +1,27 @@
+{
+  "title": {
+    "en": "Last settings update changed",
+    "de": "Letzte Einstellungsänderung geändert"
+  },
+  "hint": {
+    "en": "Triggers when the inverter API updates settings.",
+    "de": "Wird ausgelöst, wenn die Inverter-API Einstellungen ändert."
+  },
+  "args": [
+    {
+      "name": "device",
+      "type": "device",
+      "filter": "driver_id=kostal-battery"
+    }
+  ],
+  "tokens": [
+    {
+      "name": "last_api_update",
+      "type": "string",
+      "title": {
+        "en": "Last settings update",
+        "de": "Letzte Einstellungsänderung"
+      }
+    }
+  ]
+}

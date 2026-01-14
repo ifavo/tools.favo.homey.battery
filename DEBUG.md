@@ -159,6 +159,11 @@ The app uses prefixed log messages for easy filtering:
 - [ ] Check for authentication errors
 - [ ] Verify timezone setting
 
+## Settings Constraints
+
+- `min_soc` is allows values of 5-100 (step 5)
+- `max_soc` must be >= `min_soc` and uses step 5
+
 ## Getting Help
 
 When reporting issues, include:

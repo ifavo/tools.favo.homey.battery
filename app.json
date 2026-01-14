@@ -26,6 +26,38 @@
     "name": "favo",
     "email": "tools@favo.org"
   },
+  "flow": {
+    "triggers": [
+      {
+        "title": {
+          "en": "Last settings update changed",
+          "de": "Letzte Einstellungsänderung geändert"
+        },
+        "hint": {
+          "en": "Triggers when the inverter API updates settings.",
+          "de": "Wird ausgelöst, wenn die Inverter-API Einstellungen ändert."
+        },
+        "args": [
+          {
+            "name": "device",
+            "type": "device",
+            "filter": "driver_id=kostal-battery"
+          }
+        ],
+        "tokens": [
+          {
+            "name": "last_api_update",
+            "type": "string",
+            "title": {
+              "en": "Last settings update",
+              "de": "Letzte Einstellungsänderung"
+            }
+          }
+        ],
+        "id": "last_api_update_changed"
+      }
+    ]
+  },
   "drivers": [
     {
       "id": "kostal-battery",
@@ -39,7 +71,8 @@
         "measure_power",
         "measure_voltage",
         "measure_current",
-        "next_charging_times"
+        "next_charging_times",
+        "last_api_update"
       ],
       "capabilitiesOptions": {
         "onoff": {
@@ -88,6 +121,12 @@
           "title": {
             "en": "Next Charging Times",
             "de": "Nächste Ladezeiten"
+          }
+        },
+        "last_api_update": {
+          "title": {
+            "en": "Last Settings Update",
+            "de": "Letzte Einstellungsänderung"
           }
         }
       },
@@ -146,7 +185,8 @@
               },
               "value": 10,
               "min": 5,
-              "max": 50,
+              "max": 100,
+              "step": 5,
               "hint": {
                 "en": "Battery will not discharge below this level"
               }
@@ -159,8 +199,9 @@
                 "de": "Ziel-Ladezustand (%)"
               },
               "value": 80,
-              "min": 50,
+              "min": 5,
               "max": 100,
+              "step": 5,
               "hint": {
                 "en": "Target state of charge when grid charging"
               }
@@ -263,6 +304,16 @@
     }
   ],
   "capabilities": {
+    "last_api_update": {
+      "type": "string",
+      "title": {
+        "en": "Last Settings Update",
+        "de": "Letzte Einstellungsänderung"
+      },
+      "getable": true,
+      "setable": false,
+      "uiComponent": "sensor"
+    },
     "next_charging_times": {
       "type": "string",
       "title": {

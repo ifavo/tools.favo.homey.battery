@@ -43,6 +43,11 @@
       "name": {
         "en": "Next Charging Times"
       }
+    },
+    "last_api_update": {
+      "name": {
+        "en": "Last Settings Update"
+      }
     }
   }
 }
