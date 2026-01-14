@@ -5,9 +5,12 @@ import {
   fetchBatteryStatus,
   buildChargingOnPayload,
   buildChargingOffPayload,
+  buildSchedulePayload,
+  fetchSettings,
   type BatteryStatus,
   type ChargingConfig,
 } from '../logic/kostalApi/apiClient';
+import { type DaySchedule } from '../logic/kostalApi/scheduleBuilder';
 
 // Mock fetch globally
 global.fetch = jest.fn();
@@ -184,6 +187,102 @@ describe('Kostal API Client', () => {
 
       const devicesLocal = payload.find((m) => m.moduleid === 'devices:local');
       expect(devicesLocal?.settings).toContainEqual({ id: 'Battery:MinSoc', value: '15' });
+    });
+  });
+
+  describe('buildSchedulePayload', () => {
+    test('includes schedule and config values', () => {
+      const config: ChargingConfig = {
+        soc: 75,
+        gridPower: 3500,
+        minSoc: 10,
+      };
+      const schedule: DaySchedule = {
+        mon: '2'.repeat(96),
+        tue: '3'.repeat(96),
+        wed: '0'.repeat(96),
+        thu: '2'.repeat(96),
+        fri: '2'.repeat(96),
+        sat: '2'.repeat(96),
+        sun: '2'.repeat(96),
+      };
+
+      const payload = buildSchedulePayload(config, schedule);
+      const devicesLocal = payload.find((m) => m.moduleid === 'devices:local');
+
+      expect(devicesLocal?.settings).toContainEqual({ id: 'Battery:MinSoc', value: '10' });
+      expect(devicesLocal?.settings).toContainEqual({ id: 'EnergyMgmt:TimedBatCharge:Soc', value: '75' });
+      expect(devicesLocal?.settings).toContainEqual({ id: 'EnergyMgmt:TimedBatCharge:GridPower', value: '3500' });
+      expect(devicesLocal?.settings).toContainEqual({ id: 'Battery:TimeControl:ConfTue', value: schedule.tue });
+      expect(devicesLocal?.settings).toContainEqual({ id: 'Battery:TimeControl:ConfWed', value: schedule.wed });
+    });
+  });
+
+  describe('fetchSettings', () => {
+    const mockIp = '192.168.5.48';
+    const mockSessionId = 'test-session-123';
+
+    test('fetches settings successfully', async () => {
+      const mockResponsePayload = [
+        {
+          moduleid: 'devices:local',
+          settings: [
+            { id: 'Battery:MinSoc', value: '10' },
+            { id: 'EnergyMgmt:TimedBatCharge:GridPower', value: '4000.0' },
+          ],
+        },
+      ];
+
+      const mockResponse = {
+        ok: true,
+        text: jest.fn().mockResolvedValue(JSON.stringify(mockResponsePayload)),
+      } as unknown as Response;
+
+      (global.fetch as jest.Mock).mockResolvedValue(mockResponse);
+
+      const result = await fetchSettings(mockIp, mockSessionId, [
+        { moduleid: 'devices:local', settingids: ['Battery:MinSoc'] },
+      ]);
+
+      expect(result).toEqual(mockResponsePayload);
+      expect(global.fetch).toHaveBeenCalledWith(
+        `http://${mockIp}/api/v1/settings`,
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({
+            'Authorization': `Session ${mockSessionId}`,
+          }),
+        }),
+      );
+    });
+
+    test('handles empty response body', async () => {
+      const mockResponse = {
+        ok: true,
+        text: jest.fn().mockResolvedValue(''),
+      } as unknown as Response;
+
+      (global.fetch as jest.Mock).mockResolvedValue(mockResponse);
+
+      const result = await fetchSettings(mockIp, mockSessionId, [
+        { moduleid: 'devices:local', settingids: ['Battery:MinSoc'] },
+      ]);
+
+      expect(result).toEqual({});
+    });
+
+    test('handles HTTP error', async () => {
+      const mockResponse = {
+        ok: false,
+        status: 403,
+        text: jest.fn().mockResolvedValue('Forbidden'),
+      } as unknown as Response;
+
+      (global.fetch as jest.Mock).mockResolvedValue(mockResponse);
+
+      await expect(fetchSettings(mockIp, mockSessionId, [
+        { moduleid: 'devices:local', settingids: ['Battery:MinSoc'] },
+      ])).rejects.toThrow('403');
     });
   });
 });

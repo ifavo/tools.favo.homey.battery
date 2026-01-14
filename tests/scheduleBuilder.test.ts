@@ -6,6 +6,9 @@ import {
   schedulesAreDifferent,
   createDefaultSchedule,
   formatScheduleForLog,
+  SCHEDULE_VALUE_CHARGE,
+  SCHEDULE_VALUE_NORMAL,
+  SCHEDULE_VALUE_AVOID,
   type DaySchedule,
 } from '../logic/kostalApi/scheduleBuilder';
 import type { PriceBlock } from '../logic/lowPrice/types';
@@ -30,7 +33,7 @@ describe('Schedule Builder', () => {
   }
 
   describe('buildPriceBasedSchedule', () => {
-    test('sets cheapest blocks to 3', () => {
+    test('sets cheapest blocks to charge value', () => {
       // Monday Jan 6, 2025 00:00:00 UTC
       const baseTime = new Date('2025-01-06T00:00:00Z').getTime();
 
@@ -44,17 +47,17 @@ describe('Schedule Builder', () => {
         timezone: 'UTC',
       });
 
-      // First 4 blocks should be '3' (cheapest)
-      expect(schedule.mon[0]).toBe('3');
-      expect(schedule.mon[1]).toBe('3');
-      expect(schedule.mon[2]).toBe('3');
-      expect(schedule.mon[3]).toBe('3');
-      // Rest should be '2'
-      expect(schedule.mon[4]).toBe('2');
-      expect(schedule.mon[95]).toBe('2');
+      // First 4 blocks should be charge value (cheapest)
+      expect(schedule.mon[0]).toBe(SCHEDULE_VALUE_CHARGE);
+      expect(schedule.mon[1]).toBe(SCHEDULE_VALUE_CHARGE);
+      expect(schedule.mon[2]).toBe(SCHEDULE_VALUE_CHARGE);
+      expect(schedule.mon[3]).toBe(SCHEDULE_VALUE_CHARGE);
+      // Rest should be normal value
+      expect(schedule.mon[4]).toBe(SCHEDULE_VALUE_NORMAL);
+      expect(schedule.mon[95]).toBe(SCHEDULE_VALUE_NORMAL);
     });
 
-    test('sets expensive blocks to 0', () => {
+    test('sets expensive blocks to avoid value', () => {
       const baseTime = new Date('2025-01-06T00:00:00Z').getTime();
 
       // Create 96 blocks for Monday with prices 1-96
@@ -67,18 +70,18 @@ describe('Schedule Builder', () => {
         timezone: 'UTC',
       });
 
-      // First 4 blocks should be '3' (cheapest)
-      expect(schedule.mon[0]).toBe('3');
-      expect(schedule.mon[1]).toBe('3');
-      expect(schedule.mon[2]).toBe('3');
-      expect(schedule.mon[3]).toBe('3');
-      // Last 4 blocks should be '0' (most expensive)
-      expect(schedule.mon[92]).toBe('0');
-      expect(schedule.mon[93]).toBe('0');
-      expect(schedule.mon[94]).toBe('0');
-      expect(schedule.mon[95]).toBe('0');
-      // Middle blocks should be '2'
-      expect(schedule.mon[50]).toBe('2');
+      // First 4 blocks should be charge value (cheapest)
+      expect(schedule.mon[0]).toBe(SCHEDULE_VALUE_CHARGE);
+      expect(schedule.mon[1]).toBe(SCHEDULE_VALUE_CHARGE);
+      expect(schedule.mon[2]).toBe(SCHEDULE_VALUE_CHARGE);
+      expect(schedule.mon[3]).toBe(SCHEDULE_VALUE_CHARGE);
+      // Last 4 blocks should be avoid value (most expensive)
+      expect(schedule.mon[92]).toBe(SCHEDULE_VALUE_AVOID);
+      expect(schedule.mon[93]).toBe(SCHEDULE_VALUE_AVOID);
+      expect(schedule.mon[94]).toBe(SCHEDULE_VALUE_AVOID);
+      expect(schedule.mon[95]).toBe(SCHEDULE_VALUE_AVOID);
+      // Middle blocks should be normal value
+      expect(schedule.mon[50]).toBe(SCHEDULE_VALUE_NORMAL);
     });
 
     test('cheapest blocks take priority over expensive', () => {
@@ -95,9 +98,9 @@ describe('Schedule Builder', () => {
         timezone: 'UTC',
       });
 
-      // Both blocks should be '3' (cheap takes priority)
-      expect(schedule.mon[0]).toBe('3');
-      expect(schedule.mon[1]).toBe('3');
+      // Both blocks should be charge value (cheap takes priority)
+      expect(schedule.mon[0]).toBe(SCHEDULE_VALUE_CHARGE);
+      expect(schedule.mon[1]).toBe(SCHEDULE_VALUE_CHARGE);
     });
 
     test('handles empty price blocks', () => {
@@ -107,9 +110,9 @@ describe('Schedule Builder', () => {
         timezone: 'UTC',
       });
 
-      // All days should be default '2's
-      expect(schedule.mon).toBe('2'.repeat(96));
-      expect(schedule.tue).toBe('2'.repeat(96));
+      // All days should be default normal values
+      expect(schedule.mon).toBe(SCHEDULE_VALUE_NORMAL.repeat(96));
+      expect(schedule.tue).toBe(SCHEDULE_VALUE_NORMAL.repeat(96));
     });
 
     test('creates correct schedule length', () => {
@@ -136,23 +139,23 @@ describe('Schedule Builder', () => {
     test('returns true for different schedules', () => {
       const schedule1 = createDefaultSchedule();
       const schedule2 = createDefaultSchedule();
-      schedule2.mon = '3' + schedule2.mon.slice(1);
+      schedule2.mon = SCHEDULE_VALUE_CHARGE + schedule2.mon.slice(1);
 
       expect(schedulesAreDifferent(schedule1, schedule2)).toBe(true);
     });
   });
 
   describe('createDefaultSchedule', () => {
-    test('creates schedule with all 2s', () => {
+    test('creates schedule with all normal values', () => {
       const schedule = createDefaultSchedule();
 
-      expect(schedule.mon).toBe('2'.repeat(96));
-      expect(schedule.tue).toBe('2'.repeat(96));
-      expect(schedule.wed).toBe('2'.repeat(96));
-      expect(schedule.thu).toBe('2'.repeat(96));
-      expect(schedule.fri).toBe('2'.repeat(96));
-      expect(schedule.sat).toBe('2'.repeat(96));
-      expect(schedule.sun).toBe('2'.repeat(96));
+      expect(schedule.mon).toBe(SCHEDULE_VALUE_NORMAL.repeat(96));
+      expect(schedule.tue).toBe(SCHEDULE_VALUE_NORMAL.repeat(96));
+      expect(schedule.wed).toBe(SCHEDULE_VALUE_NORMAL.repeat(96));
+      expect(schedule.thu).toBe(SCHEDULE_VALUE_NORMAL.repeat(96));
+      expect(schedule.fri).toBe(SCHEDULE_VALUE_NORMAL.repeat(96));
+      expect(schedule.sat).toBe(SCHEDULE_VALUE_NORMAL.repeat(96));
+      expect(schedule.sun).toBe(SCHEDULE_VALUE_NORMAL.repeat(96));
     });
   });
 
@@ -160,7 +163,9 @@ describe('Schedule Builder', () => {
     test('formats schedule summary correctly', () => {
       const schedule = createDefaultSchedule();
       // Modify one day
-      schedule.mon = '3333' + '0000' + '2'.repeat(88);
+      schedule.mon = SCHEDULE_VALUE_CHARGE.repeat(4)
+        + SCHEDULE_VALUE_AVOID.repeat(4)
+        + SCHEDULE_VALUE_NORMAL.repeat(88);
 
       const log = formatScheduleForLog(schedule);
 
