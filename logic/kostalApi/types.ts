@@ -50,7 +50,7 @@ export interface ProcessDataModule {
  */
 export interface BatteryStatus {
   soc: number;        // State of Charge (%)
-  power: number;      // Power (W), negative = discharging
+  power: number;      // Power (W), negative = charging, positive = discharging
   voltage: number;    // Voltage (V)
   current: number;    // Current (A)
   cycles: number;     // Cycle count

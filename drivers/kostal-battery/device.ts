@@ -35,6 +35,7 @@ import {
   MILLISECONDS_PER_HOUR,
 } from '../../logic/utils/dateUtils';
 import { detectTimeFrame, type TimeFrame } from '../../logic/utils/timeFrameDetector';
+import { isChargingFromPower } from '../../logic/utils/batteryUtils';
 
 /**
  * Kostal Battery Device
@@ -264,8 +265,9 @@ class KostalBatteryDevice extends Homey.Device {
     await this.setCapabilityValue('measure_power', status.power).catch(() => { });
     await this.setCapabilityValue('measure_voltage', status.voltage).catch(() => { });
     await this.setCapabilityValue('measure_current', status.current).catch(() => { });
-    // Reflect charging state: power > 0 means charging, <= 0 means not charging
-    const isCharging = status.power > 0;
+    // Reflect charging state: negative power means charging (power flowing into battery)
+    // Positive power means discharging (power flowing out of battery)
+    const isCharging = isChargingFromPower(status.power);
     await this.setCapabilityValue('onoff', isCharging).catch(() => { });
     // Note: cycles data is fetched but not displayed (no standard Homey capability)
   }
