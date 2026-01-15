@@ -9,22 +9,34 @@ import type { PriceBlock } from '../lowPrice/types';
 // ============================================================================
 
 /**
- * Value for cheapest price blocks - charge from grid
- * Kostal TimeControl: "4" = charge battery from grid and do not use battery at home
+ * Value for default behavior (automatic operation)
+ * Kostal TimeControl: "0" = default automatic operation
  */
-export const SCHEDULE_VALUE_CHARGE = '4';
+export const SCHEDULE_VALUE_DEFAULT = '0';
 
 /**
- * Value for normal/medium price blocks - standard operation
- * Kostal TimeControl: "2" = normal automatic operation
+ * Value for no grid charge, battery can be used at home
+ * Kostal TimeControl: "1" = do not charge from grid, allow battery use
  */
-export const SCHEDULE_VALUE_NORMAL = '2';
+export const SCHEDULE_VALUE_NO_CHARGE_ALLOW_USE = '1';
 
 /**
- * Value for expensive price blocks - avoid grid charging
- * Kostal TimeControl: "0" = do not charge from grid
+ * Value for no grid charge, battery cannot be used at home
+ * Kostal TimeControl: "2" = do not charge from grid, disallow battery use
  */
-export const SCHEDULE_VALUE_AVOID = '0';
+export const SCHEDULE_VALUE_NO_CHARGE_DISALLOW_USE = '2';
+
+/**
+ * Value for grid charge, battery can be used at home
+ * Kostal TimeControl: "3" = charge from grid, allow battery use
+ */
+export const SCHEDULE_VALUE_CHARGE_ALLOW_USE = '3';
+
+/**
+ * Value for grid charge, battery cannot be used at home
+ * Kostal TimeControl: "4" = charge from grid, disallow battery use
+ */
+export const SCHEDULE_VALUE_CHARGE_DISALLOW_USE = '4';
 
 // ============================================================================
 
@@ -45,18 +57,18 @@ export interface DaySchedule {
  * Schedule configuration options
  */
 export interface ScheduleOptions {
-  /** Number of cheapest blocks to set as "3" (charge) */
+  /** Number of cheapest blocks to set as "4" (charge, disallow use) */
   cheapestBlocksCount: number;
-  /** Number of most expensive blocks to set as "0" (avoid) */
+  /** Number of most expensive blocks to set as "1" (no charge, allow use) */
   expensiveBlocksCount: number;
   /** Timezone for determining day boundaries */
   timezone: string;
 }
 
 /**
- * Default schedule - all blocks set to normal operation
+ * Default schedule - all blocks set to default operation
  */
-const DEFAULT_SCHEDULE = SCHEDULE_VALUE_NORMAL.repeat(96);
+const DEFAULT_SCHEDULE = SCHEDULE_VALUE_DEFAULT.repeat(96);
 
 /**
  * Get the day of week (0=Sun, 1=Mon, ..., 6=Sat) in the specified timezone
@@ -137,7 +149,7 @@ export function buildPriceBasedSchedule(
     for (const block of cheapestBlocks) {
       const quarterHourIndex = getQuarterHourIndex(block.start, timezone);
       if (quarterHourIndex >= 0 && quarterHourIndex < 96) {
-        schedules[day][quarterHourIndex] = SCHEDULE_VALUE_CHARGE;
+        schedules[day][quarterHourIndex] = SCHEDULE_VALUE_CHARGE_DISALLOW_USE;
       }
     }
 
@@ -148,8 +160,8 @@ export function buildPriceBasedSchedule(
         const quarterHourIndex = getQuarterHourIndex(block.start, timezone);
         if (quarterHourIndex >= 0 && quarterHourIndex < 96) {
           // Only set to avoid if not already charging (cheap takes priority)
-          if (schedules[day][quarterHourIndex] !== SCHEDULE_VALUE_CHARGE) {
-            schedules[day][quarterHourIndex] = SCHEDULE_VALUE_AVOID;
+          if (schedules[day][quarterHourIndex] !== SCHEDULE_VALUE_CHARGE_DISALLOW_USE) {
+            schedules[day][quarterHourIndex] = SCHEDULE_VALUE_NO_CHARGE_ALLOW_USE;
           }
         }
       }
@@ -176,7 +188,7 @@ export function schedulesAreDifferent(a: DaySchedule, b: DaySchedule): boolean {
 }
 
 /**
- * Create a default schedule (all "2"s for normal operation)
+ * Create a default schedule (all "0"s for default operation)
  */
 export function createDefaultSchedule(): DaySchedule {
   return {
@@ -199,12 +211,20 @@ export function formatScheduleForLog(schedule: DaySchedule): string {
 
   for (const day of days) {
     const s = schedule[day];
-    const chargeRegex = new RegExp(SCHEDULE_VALUE_CHARGE, 'g');
-    const avoidRegex = new RegExp(SCHEDULE_VALUE_AVOID, 'g');
-    const countCharge = (s.match(chargeRegex) || []).length;
-    const countAvoid = (s.match(avoidRegex) || []).length;
-    const countNormal = 96 - countCharge - countAvoid;
-    summary.push(`${day.toUpperCase()}:${countCharge}ch/${countNormal}n/${countAvoid}av`);
+    const chargeDisallowRegex = new RegExp(SCHEDULE_VALUE_CHARGE_DISALLOW_USE, 'g');
+    const chargeAllowRegex = new RegExp(SCHEDULE_VALUE_CHARGE_ALLOW_USE, 'g');
+    const noChargeAllowRegex = new RegExp(SCHEDULE_VALUE_NO_CHARGE_ALLOW_USE, 'g');
+    const noChargeDisallowRegex = new RegExp(SCHEDULE_VALUE_NO_CHARGE_DISALLOW_USE, 'g');
+    const defaultRegex = new RegExp(SCHEDULE_VALUE_DEFAULT, 'g');
+    const countChargeDisallow = (s.match(chargeDisallowRegex) || []).length;
+    const countChargeAllow = (s.match(chargeAllowRegex) || []).length;
+    const countNoChargeAllow = (s.match(noChargeAllowRegex) || []).length;
+    const countNoChargeDisallow = (s.match(noChargeDisallowRegex) || []).length;
+    const countDefault = (s.match(defaultRegex) || []).length;
+    summary.push(
+      `${day.toUpperCase()}:${countChargeDisallow}cd/${countChargeAllow}ca/`
+      + `${countNoChargeAllow}nca/${countNoChargeDisallow}ncd/${countDefault}def`,
+    );
   }
 
   return summary.join(' ');

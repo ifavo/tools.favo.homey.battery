@@ -14,9 +14,11 @@ import {
   buildPriceBasedSchedule,
   schedulesAreDifferent,
   formatScheduleForLog,
-  SCHEDULE_VALUE_CHARGE,
-  SCHEDULE_VALUE_NORMAL,
-  SCHEDULE_VALUE_AVOID,
+  SCHEDULE_VALUE_DEFAULT,
+  SCHEDULE_VALUE_NO_CHARGE_ALLOW_USE,
+  SCHEDULE_VALUE_NO_CHARGE_DISALLOW_USE,
+  SCHEDULE_VALUE_CHARGE_ALLOW_USE,
+  SCHEDULE_VALUE_CHARGE_DISALLOW_USE,
   type DaySchedule,
 } from '../../logic/kostalApi/scheduleBuilder';
 import type { BatteryStatus, ChargingConfig, SettingsModule } from '../../logic/kostalApi/types';
@@ -582,10 +584,17 @@ class KostalBatteryDevice extends Homey.Device {
       const dayNames = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const;
       const todayDayName = dayNames[new Date().getDay()];
       const todaySchedule = newSchedule[todayDayName];
-      const chargeCount = countChars(todaySchedule, SCHEDULE_VALUE_CHARGE);
-      const avoidCount = countChars(todaySchedule, SCHEDULE_VALUE_AVOID);
-      const normalCount = countChars(todaySchedule, SCHEDULE_VALUE_NORMAL);
-      this.log(`[SCHEDULE] ${todayDayName.toUpperCase()}: ${chargeCount} charge blocks, ${avoidCount} avoid blocks, ${normalCount} normal blocks`);
+      const chargeDisallowCount = countChars(todaySchedule, SCHEDULE_VALUE_CHARGE_DISALLOW_USE);
+      const chargeAllowCount = countChars(todaySchedule, SCHEDULE_VALUE_CHARGE_ALLOW_USE);
+      const noChargeAllowCount = countChars(todaySchedule, SCHEDULE_VALUE_NO_CHARGE_ALLOW_USE);
+      const noChargeDisallowCount = countChars(todaySchedule, SCHEDULE_VALUE_NO_CHARGE_DISALLOW_USE);
+      const defaultCount = countChars(todaySchedule, SCHEDULE_VALUE_DEFAULT);
+      this.log(
+        `[SCHEDULE] ${todayDayName.toUpperCase()}: `
+        + `${chargeDisallowCount} charge_disallow, ${chargeAllowCount} charge_allow, `
+        + `${noChargeAllowCount} no_charge_allow, ${noChargeDisallowCount} no_charge_disallow, `
+        + `${defaultCount} default`,
+      );
 
       // Build new config
       const ip = this.getSetting('ip') as string;

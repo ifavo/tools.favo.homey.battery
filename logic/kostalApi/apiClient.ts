@@ -9,13 +9,13 @@ import type {
   ChargingConfig,
   KostalApiError,
 } from './types';
-import { type DaySchedule, SCHEDULE_VALUE_CHARGE } from './scheduleBuilder';
+import { type DaySchedule, SCHEDULE_VALUE_CHARGE_DISALLOW_USE } from './scheduleBuilder';
 
 /**
  * All charge values for 24 hours (96 quarter-hours) - enables TimeControl for all times
  * Used for manual "always charge" mode
  */
-const TIME_CONTROL_ALL_ENABLED = SCHEDULE_VALUE_CHARGE.repeat(96);
+const TIME_CONTROL_ALL_ENABLED = SCHEDULE_VALUE_CHARGE_DISALLOW_USE.repeat(96);
 
 /**
  * Make an authenticated request to the Kostal API
