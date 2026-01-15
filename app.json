@@ -230,18 +230,6 @@
           },
           "children": [
             {
-              "id": "enable_low_price_charging",
-              "type": "checkbox",
-              "label": {
-                "en": "Enable Low Price Charging",
-                "de": "Niedrigpreis-Ladung aktivieren"
-              },
-              "value": false,
-              "hint": {
-                "en": "Automatically charge during cheapest electricity price blocks"
-              }
-            },
-            {
               "id": "low_price_blocks_count",
               "type": "number",
               "label": {
@@ -279,6 +267,153 @@
               "value": "",
               "hint": {
                 "en": "Timezone for price time formatting (e.g., Europe/Berlin). Leave empty to auto-detect."
+              }
+            },
+            {
+              "id": "cheapest_blocks_value",
+              "type": "dropdown",
+              "label": {
+                "en": "Cheapest Time Blocks",
+                "de": "Günstigste Zeitblöcken"
+              },
+              "value": "4",
+              "values": [
+                {
+                  "id": "0",
+                  "label": {
+                    "en": "No restriction",
+                    "de": "Keine Einschränkung"
+                  }
+                },
+                {
+                  "id": "1",
+                  "label": {
+                    "en": "Don't charge, may discharge",
+                    "de": "Nicht laden, darf entladen"
+                  }
+                },
+                {
+                  "id": "2",
+                  "label": {
+                    "en": "Only surplus charging, don't discharge",
+                    "de": "Nur Überschussladung, nicht entladen"
+                  }
+                },
+                {
+                  "id": "3",
+                  "label": {
+                    "en": "Charge at maximum, may discharge",
+                    "de": "Ladung auf Maximum, darf entladen"
+                  }
+                },
+                {
+                  "id": "4",
+                  "label": {
+                    "en": "Charge at maximum, may not discharge",
+                    "de": "Ladung auf Maximum, darf nicht entladen"
+                  }
+                }
+              ],
+              "hint": {
+                "en": "Schedule value for cheapest time blocks"
+              }
+            },
+            {
+              "id": "expensive_blocks_value",
+              "type": "dropdown",
+              "label": {
+                "en": "Most Expensive Time Blocks",
+                "de": "Teuerste Zeitblöcken"
+              },
+              "value": "1",
+              "values": [
+                {
+                  "id": "0",
+                  "label": {
+                    "en": "No restriction",
+                    "de": "Keine Einschränkung"
+                  }
+                },
+                {
+                  "id": "1",
+                  "label": {
+                    "en": "Don't charge, may discharge",
+                    "de": "Nicht laden, darf entladen"
+                  }
+                },
+                {
+                  "id": "2",
+                  "label": {
+                    "en": "Only surplus charging, don't discharge",
+                    "de": "Nur Überschussladung, nicht entladen"
+                  }
+                },
+                {
+                  "id": "3",
+                  "label": {
+                    "en": "Charge at maximum, may discharge",
+                    "de": "Ladung auf Maximum, darf entladen"
+                  }
+                },
+                {
+                  "id": "4",
+                  "label": {
+                    "en": "Charge at maximum, may not discharge",
+                    "de": "Ladung auf Maximum, darf nicht entladen"
+                  }
+                }
+              ],
+              "hint": {
+                "en": "Schedule value for most expensive time blocks"
+              }
+            },
+            {
+              "id": "standard_state_value",
+              "type": "dropdown",
+              "label": {
+                "en": "Standard State",
+                "de": "Standardzustand"
+              },
+              "value": "0",
+              "values": [
+                {
+                  "id": "0",
+                  "label": {
+                    "en": "No restriction",
+                    "de": "Keine Einschränkung"
+                  }
+                },
+                {
+                  "id": "1",
+                  "label": {
+                    "en": "Don't charge, may discharge",
+                    "de": "Nicht laden, darf entladen"
+                  }
+                },
+                {
+                  "id": "2",
+                  "label": {
+                    "en": "Only surplus charging, don't discharge",
+                    "de": "Nur Überschussladung, nicht entladen"
+                  }
+                },
+                {
+                  "id": "3",
+                  "label": {
+                    "en": "Charge at maximum, may discharge",
+                    "de": "Ladung auf Maximum, darf entladen"
+                  }
+                },
+                {
+                  "id": "4",
+                  "label": {
+                    "en": "Charge at maximum, may not discharge",
+                    "de": "Ladung auf Maximum, darf nicht entladen"
+                  }
+                }
+              ],
+              "hint": {
+                "en": "Schedule value for standard/default time blocks"
               }
             }
           ]

@@ -82,11 +82,8 @@ class KostalBatteryDevice extends Homey.Device {
     // Start polling
     await this.startPolling();
 
-    // Start price-based schedule updates
-    const enableLowPrice = this.getSetting('enable_low_price_charging') as boolean;
-    if (enableLowPrice) {
-      await this.startScheduleUpdates();
-    }
+    // Start price-based schedule updates (always enabled)
+    await this.startScheduleUpdates();
 
     this.log('[INIT] Device initialization completed');
   }
@@ -141,20 +138,14 @@ class KostalBatteryDevice extends Homey.Device {
       }
     }
 
-    // Handle low price charging toggle
-    if (event.changedKeys.includes('enable_low_price_charging')) {
-      const enabled = event.newSettings.enable_low_price_charging as boolean;
-      if (enabled) {
-        await this.startScheduleUpdates();
-      } else {
-        this.stopScheduleUpdates();
-        // Turn off time control when disabling
-        await this.setChargingOff();
-      }
-    }
-
     // If schedule-related settings changed, force schedule update
-    const scheduleSettings = ['low_price_blocks_count', 'expensive_blocks_count'];
+    const scheduleSettings = [
+      'low_price_blocks_count',
+      'expensive_blocks_count',
+      'cheapest_blocks_value',
+      'expensive_blocks_value',
+      'standard_state_value',
+    ];
     const configSettings = ['min_soc', 'max_soc', 'watts'];
     const hasScheduleChange = scheduleSettings.some((s) => event.changedKeys.includes(s));
     const hasConfigChange = configSettings.some((s) => event.changedKeys.includes(s));
@@ -164,10 +155,8 @@ class KostalBatteryDevice extends Homey.Device {
       if (hasScheduleChange) this.currentSchedule = undefined;
       if (hasConfigChange) this.currentConfig = undefined;
 
-      const enabled = event.newSettings.enable_low_price_charging as boolean ?? this.getSetting('enable_low_price_charging');
-      if (enabled) {
-        await this.updateScheduleFromPrices(event.newSettings);
-      }
+      // Always update schedule (feature is always enabled)
+      await this.updateScheduleFromPrices(event.newSettings);
     }
   }
 
@@ -501,13 +490,20 @@ class KostalBatteryDevice extends Homey.Device {
     settingsOverride: Partial<Record<string, unknown>> = {},
   ): Promise<void> {
     try {
-      const enableLowPrice = (settingsOverride.enable_low_price_charging
-        ?? this.getSetting('enable_low_price_charging')) as boolean;
       const cheapestBlocksCount = Number(
         settingsOverride.low_price_blocks_count ?? this.getSetting('low_price_blocks_count') ?? 8,
       );
       const expensiveBlocksCount = Number(
         settingsOverride.expensive_blocks_count ?? this.getSetting('expensive_blocks_count') ?? 8,
+      );
+      const cheapestBlocksValue = String(
+        settingsOverride.cheapest_blocks_value ?? this.getSetting('cheapest_blocks_value') ?? '4',
+      );
+      const expensiveBlocksValue = String(
+        settingsOverride.expensive_blocks_value ?? this.getSetting('expensive_blocks_value') ?? '1',
+      );
+      const standardStateValue = String(
+        settingsOverride.standard_state_value ?? this.getSetting('standard_state_value') ?? '0',
       );
       const timezone = this.resolveTimezone(
         settingsOverride.price_timezone ?? this.getSetting('price_timezone'),
@@ -565,17 +561,14 @@ class KostalBatteryDevice extends Homey.Device {
       });
       await this.setCapabilityValue('next_charging_times', nextTimesText).catch(() => { });
 
-      // Only update schedule if feature is enabled
-      if (!enableLowPrice) {
-        this.log('[PRICE] Low price charging disabled, skipping schedule update');
-        return;
-      }
-
       // Build price-based schedule
       this.log('[SCHEDULE] Building price-based schedule...');
       const newSchedule = buildPriceBasedSchedule(priceBlocks, {
         cheapestBlocksCount,
         expensiveBlocksCount,
+        cheapestBlocksValue,
+        expensiveBlocksValue,
+        standardStateValue,
         timezone,
       });
 

@@ -44,6 +44,9 @@ describe('Schedule Builder', () => {
       const schedule = buildPriceBasedSchedule(blocks, {
         cheapestBlocksCount: 4,
         expensiveBlocksCount: 0,
+        cheapestBlocksValue: '4',
+        expensiveBlocksValue: '1',
+        standardStateValue: '0',
         timezone: 'UTC',
       });
 
@@ -67,6 +70,9 @@ describe('Schedule Builder', () => {
       const schedule = buildPriceBasedSchedule(blocks, {
         cheapestBlocksCount: 4,
         expensiveBlocksCount: 4,
+        cheapestBlocksValue: '4',
+        expensiveBlocksValue: '1',
+        standardStateValue: '0',
         timezone: 'UTC',
       });
 
@@ -95,6 +101,9 @@ describe('Schedule Builder', () => {
       const schedule = buildPriceBasedSchedule(blocks, {
         cheapestBlocksCount: 2,
         expensiveBlocksCount: 2,
+        cheapestBlocksValue: '4',
+        expensiveBlocksValue: '1',
+        standardStateValue: '0',
         timezone: 'UTC',
       });
 
@@ -107,6 +116,9 @@ describe('Schedule Builder', () => {
       const schedule = buildPriceBasedSchedule([], {
         cheapestBlocksCount: 4,
         expensiveBlocksCount: 4,
+        cheapestBlocksValue: '4',
+        expensiveBlocksValue: '1',
+        standardStateValue: '0',
         timezone: 'UTC',
       });
 

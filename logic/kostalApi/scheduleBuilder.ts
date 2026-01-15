@@ -57,18 +57,26 @@ export interface DaySchedule {
  * Schedule configuration options
  */
 export interface ScheduleOptions {
-  /** Number of cheapest blocks to set as "4" (charge, disallow use) */
+  /** Number of cheapest blocks to mark */
   cheapestBlocksCount: number;
-  /** Number of most expensive blocks to set as "1" (no charge, allow use) */
+  /** Number of most expensive blocks to mark */
   expensiveBlocksCount: number;
+  /** Schedule value to use for cheapest blocks */
+  cheapestBlocksValue: string;
+  /** Schedule value to use for most expensive blocks */
+  expensiveBlocksValue: string;
+  /** Schedule value to use for standard/default blocks */
+  standardStateValue: string;
   /** Timezone for determining day boundaries */
   timezone: string;
 }
 
 /**
- * Default schedule - all blocks set to default operation
+ * Create default schedule string with specified value
  */
-const DEFAULT_SCHEDULE = SCHEDULE_VALUE_DEFAULT.repeat(96);
+function createDefaultScheduleString(value: string): string {
+  return value.repeat(96);
+}
 
 /**
  * Get the day of week (0=Sun, 1=Mon, ..., 6=Sat) in the specified timezone
@@ -113,17 +121,25 @@ export function buildPriceBasedSchedule(
   priceBlocks: PriceBlock[],
   options: ScheduleOptions,
 ): DaySchedule {
-  const { cheapestBlocksCount, expensiveBlocksCount, timezone } = options;
+  const {
+    cheapestBlocksCount,
+    expensiveBlocksCount,
+    cheapestBlocksValue,
+    expensiveBlocksValue,
+    standardStateValue,
+    timezone,
+  } = options;
 
-  // Initialize schedules for each day with default values
+  // Initialize schedules for each day with standard state value
+  const defaultSchedule = createDefaultScheduleString(standardStateValue);
   const schedules: Record<number, string[]> = {
-    0: DEFAULT_SCHEDULE.split(''), // Sunday
-    1: DEFAULT_SCHEDULE.split(''), // Monday
-    2: DEFAULT_SCHEDULE.split(''), // Tuesday
-    3: DEFAULT_SCHEDULE.split(''), // Wednesday
-    4: DEFAULT_SCHEDULE.split(''), // Thursday
-    5: DEFAULT_SCHEDULE.split(''), // Friday
-    6: DEFAULT_SCHEDULE.split(''), // Saturday
+    0: defaultSchedule.split(''), // Sunday
+    1: defaultSchedule.split(''), // Monday
+    2: defaultSchedule.split(''), // Tuesday
+    3: defaultSchedule.split(''), // Wednesday
+    4: defaultSchedule.split(''), // Thursday
+    5: defaultSchedule.split(''), // Friday
+    6: defaultSchedule.split(''), // Saturday
   };
 
   // Group blocks by day
@@ -144,24 +160,24 @@ export function buildPriceBasedSchedule(
     // Sort by price to find cheapest and most expensive
     const sortedByPrice = [...dayBlocks].sort((a, b) => a.price - b.price);
 
-    // Get cheapest blocks (set to charge from grid)
+    // Get cheapest blocks (set to configured value)
     const cheapestBlocks = sortedByPrice.slice(0, cheapestBlocksCount);
     for (const block of cheapestBlocks) {
       const quarterHourIndex = getQuarterHourIndex(block.start, timezone);
       if (quarterHourIndex >= 0 && quarterHourIndex < 96) {
-        schedules[day][quarterHourIndex] = SCHEDULE_VALUE_CHARGE_DISALLOW_USE;
+        schedules[day][quarterHourIndex] = cheapestBlocksValue;
       }
     }
 
-    // Get most expensive blocks (set to avoid grid)
+    // Get most expensive blocks (set to configured value)
     if (expensiveBlocksCount > 0) {
       const expensiveBlocks = sortedByPrice.slice(-expensiveBlocksCount);
       for (const block of expensiveBlocks) {
         const quarterHourIndex = getQuarterHourIndex(block.start, timezone);
         if (quarterHourIndex >= 0 && quarterHourIndex < 96) {
-          // Only set to avoid if not already charging (cheap takes priority)
-          if (schedules[day][quarterHourIndex] !== SCHEDULE_VALUE_CHARGE_DISALLOW_USE) {
-            schedules[day][quarterHourIndex] = SCHEDULE_VALUE_NO_CHARGE_ALLOW_USE;
+          // Only set expensive value if not already set by cheapest (cheap takes priority)
+          if (schedules[day][quarterHourIndex] !== cheapestBlocksValue) {
+            schedules[day][quarterHourIndex] = expensiveBlocksValue;
           }
         }
       }
@@ -191,14 +207,15 @@ export function schedulesAreDifferent(a: DaySchedule, b: DaySchedule): boolean {
  * Create a default schedule (all "0"s for default operation)
  */
 export function createDefaultSchedule(): DaySchedule {
+  const defaultSchedule = SCHEDULE_VALUE_DEFAULT.repeat(96);
   return {
-    mon: DEFAULT_SCHEDULE,
-    tue: DEFAULT_SCHEDULE,
-    wed: DEFAULT_SCHEDULE,
-    thu: DEFAULT_SCHEDULE,
-    fri: DEFAULT_SCHEDULE,
-    sat: DEFAULT_SCHEDULE,
-    sun: DEFAULT_SCHEDULE,
+    mon: defaultSchedule,
+    tue: defaultSchedule,
+    wed: defaultSchedule,
+    thu: defaultSchedule,
+    fri: defaultSchedule,
+    sat: defaultSchedule,
+    sun: defaultSchedule,
   };
 }
 
