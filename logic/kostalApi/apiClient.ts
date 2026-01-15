@@ -25,7 +25,7 @@ async function kostalRequest<T>(
   sessionId: string,
   method: 'GET' | 'POST' | 'PUT',
   path: string,
-  body?: unknown,
+  body: unknown,
 ): Promise<T> {
   const url = `http://${ip}/api/v1${path}`;
 
@@ -36,7 +36,7 @@ async function kostalRequest<T>(
       'Content-Type': 'application/json',
       'Accept': 'application/json',
     },
-    body: body ? JSON.stringify(body) : undefined,
+    body: JSON.stringify(body),
   });
 
   if (!response.ok) {
@@ -334,3 +334,22 @@ export async function setChargingSchedule(
   await kostalRequest(ip, sessionId, 'PUT', '/settings', payload);
 }
 
+/**
+ * Update only the Battery:MinHomeComsumption setting
+ * This allows updating a single setting without affecting other settings
+ */
+export async function setMinHomeConsumption(
+  ip: string,
+  sessionId: string,
+  value: number,
+): Promise<void> {
+  const payload: SettingsModule[] = [
+    {
+      moduleid: 'devices:local',
+      settings: [
+        { id: 'Battery:MinHomeComsumption', value: String(value) },
+      ],
+    },
+  ];
+  await kostalRequest(ip, sessionId, 'PUT', '/settings', payload);
+}

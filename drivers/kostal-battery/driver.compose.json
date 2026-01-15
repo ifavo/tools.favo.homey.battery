@@ -105,6 +105,18 @@
           "hint": {
             "en": "Password for the 'user' (Anlagenbetreiber) account"
           }
+        },
+        {
+          "id": "price_timezone",
+          "type": "text",
+          "label": {
+            "en": "Timezone",
+            "de": "Zeitzone"
+          },
+          "value": "",
+          "hint": {
+            "en": "Timezone for price time formatting (e.g., Europe/Berlin). Leave empty to auto-detect."
+          }
         }
       ]
     },
@@ -158,20 +170,6 @@
           "hint": {
             "en": "Power to draw from grid for charging"
           }
-        },
-        {
-          "id": "min_home_consumption",
-          "type": "number",
-          "label": {
-            "en": "Battery Discharge from Grid Consumption (W)",
-            "de": "Batterieentladung ab Netzbezug von [W]:"
-          },
-          "value": 1000,
-          "min": 0,
-          "max": 10000,
-          "hint": {
-            "en": "Minimum grid consumption threshold for battery discharge"
-          }
         }
       ]
     },
@@ -181,53 +179,35 @@
         "en": "Low Price Charging",
         "de": "Niedrigpreis-Ladung"
       },
+      "children": []
+    },
+    {
+      "type": "group",
+      "label": {
+        "en": "Cheapest Blocks",
+        "de": "Günstigste Blöcke"
+      },
       "children": [
         {
           "id": "low_price_blocks_count",
           "type": "number",
           "label": {
-            "en": "Cheapest Blocks (charge)",
-            "de": "Günstigste Blöcke (laden)"
+            "en": "Number of Blocks",
+            "de": "Anzahl der Blöcke"
           },
           "value": 8,
           "min": 0,
           "max": 96,
           "hint": {
-            "en": "15-min blocks per day set to grid charge (value 3). Default: 8 = 2 hours"
-          }
-        },
-        {
-          "id": "expensive_blocks_count",
-          "type": "number",
-          "label": {
-            "en": "Expensive Blocks (avoid)",
-            "de": "Teure Blöcke (vermeiden)"
-          },
-          "value": 8,
-          "min": 0,
-          "max": 96,
-          "hint": {
-            "en": "15-min blocks per day set to avoid grid (value 0). Default: 8 = 2 hours"
-          }
-        },
-        {
-          "id": "price_timezone",
-          "type": "text",
-          "label": {
-            "en": "Timezone",
-            "de": "Zeitzone"
-          },
-          "value": "",
-          "hint": {
-            "en": "Timezone for price time formatting (e.g., Europe/Berlin). Leave empty to auto-detect."
+            "en": "15-min blocks per day set to grid charge. Default: 8 = 2 hours"
           }
         },
         {
           "id": "cheapest_blocks_value",
           "type": "dropdown",
           "label": {
-            "en": "Cheapest Time Blocks",
-            "de": "Günstigste Zeitblöcken"
+            "en": "Schedule Value",
+            "de": "Zeitplanwert"
           },
           "value": "4",
           "values": [
@@ -272,11 +252,120 @@
           }
         },
         {
+          "id": "min_home_consumption_cheapest",
+          "type": "number",
+          "label": {
+            "en": "Battery Discharge from Grid Consumption (W)",
+            "de": "Batterieentladung ab Netzbezug (W)"
+          },
+          "value": 50,
+          "min": 0,
+          "max": 10000,
+          "hint": {
+            "en": "Minimum grid consumption threshold for battery discharge during cheapest price blocks"
+          }
+        }
+      ]
+    },
+    {
+      "type": "group",
+      "label": {
+        "en": "Standard Blocks",
+        "de": "Standard Blöcke"
+      },
+      "children": [
+        {
+          "id": "standard_state_value",
+          "type": "dropdown",
+          "label": {
+            "en": "Schedule Value",
+            "de": "Zeitplanwert"
+          },
+          "value": "0",
+          "values": [
+            {
+              "id": "0",
+              "label": {
+                "en": "No restriction",
+                "de": "Keine Einschränkung"
+              }
+            },
+            {
+              "id": "1",
+              "label": {
+                "en": "Don't charge, may discharge",
+                "de": "Nicht laden, darf entladen"
+              }
+            },
+            {
+              "id": "2",
+              "label": {
+                "en": "Only surplus charging, don't discharge",
+                "de": "Nur Überschussladung, nicht entladen"
+              }
+            },
+            {
+              "id": "3",
+              "label": {
+                "en": "Charge at maximum, may discharge",
+                "de": "Ladung auf Maximum, darf entladen"
+              }
+            },
+            {
+              "id": "4",
+              "label": {
+                "en": "Charge at maximum, may not discharge",
+                "de": "Ladung auf Maximum, darf nicht entladen"
+              }
+            }
+          ],
+          "hint": {
+            "en": "Schedule value for standard/default time blocks"
+          }
+        },
+        {
+          "id": "min_home_consumption_standard",
+          "type": "number",
+          "label": {
+            "en": "Battery Discharge from Grid Consumption (W)",
+            "de": "Batterieentladung ab Netzbezug (W)"
+          },
+          "value": 50,
+          "min": 0,
+          "max": 10000,
+          "hint": {
+            "en": "Minimum grid consumption threshold for battery discharge during standard price blocks"
+          }
+        }
+      ]
+    },
+    {
+      "type": "group",
+      "label": {
+        "en": "Most Expensive Blocks",
+        "de": "Teuerste Blöcke"
+      },
+      "children": [
+        {
+          "id": "expensive_blocks_count",
+          "type": "number",
+          "label": {
+            "en": "Number of Blocks",
+            "de": "Anzahl der Blöcke"
+          },
+          "value": 8,
+          "min": 0,
+          "max": 96,
+          "hint": {
+            "en": "15-min blocks per day set to avoid grid. Default: 8 = 2 hours"
+          }
+        },
+        {
           "id": "expensive_blocks_value",
           "type": "dropdown",
           "label": {
-            "en": "Most Expensive Time Blocks",
-            "de": "Teuerste Zeitblöcken"
+            "en": "Schedule Value",
+            "de": "Zeitplanwert"
           },
           "value": "1",
           "values": [
@@ -321,52 +410,17 @@
           }
         },
         {
-          "id": "standard_state_value",
-          "type": "dropdown",
+          "id": "min_home_consumption_expensive",
+          "type": "number",
           "label": {
-            "en": "Standard State",
-            "de": "Standardzustand"
+            "en": "Battery Discharge from Grid Consumption (W)",
+            "de": "Batterieentladung ab Netzbezug (W)"
           },
-          "value": "0",
-          "values": [
-            {
-              "id": "0",
-              "label": {
-                "en": "No restriction",
-                "de": "Keine Einschränkung"
-              }
-            },
-            {
-              "id": "1",
-              "label": {
-                "en": "Don't charge, may discharge",
-                "de": "Nicht laden, darf entladen"
-              }
-            },
-            {
-              "id": "2",
-              "label": {
-                "en": "Only surplus charging, don't discharge",
-                "de": "Nur Überschussladung, nicht entladen"
-              }
-            },
-            {
-              "id": "3",
-              "label": {
-                "en": "Charge at maximum, may discharge",
-                "de": "Ladung auf Maximum, darf entladen"
-              }
-            },
-            {
-              "id": "4",
-              "label": {
-                "en": "Charge at maximum, may not discharge",
-                "de": "Ladung auf Maximum, darf nicht entladen"
-              }
-            }
-          ],
+          "value": 50,
+          "min": 0,
+          "max": 10000,
           "hint": {
-            "en": "Schedule value for standard/default time blocks"
+            "en": "Minimum grid consumption threshold for battery discharge during most expensive price blocks"
           }
         }
       ]

@@ -38,6 +38,10 @@ describe('SessionManager', () => {
         createdAt: Date.now(),
       };
 
+      // First call loads from storage into memory
+      await sessionManager.getSession();
+
+      // Second call should use in-memory cache (line 50)
       const session = await sessionManager.getSession();
 
       expect(session).toBe('cached-session-123');
@@ -194,6 +198,36 @@ describe('SessionManager', () => {
 
       expect(apiCall).toHaveBeenCalledTimes(1);
       expect(performScramAuth).not.toHaveBeenCalled();
+    });
+
+    test('throws error when authentication already in progress', async () => {
+      (performScramAuth as jest.Mock).mockImplementation(() => new Promise(() => {})); // Never resolves
+
+      const sessionManager = new SessionManager('192.168.1.100', 'password', mockStorage);
+
+      // Start authentication (will hang)
+      const promise1 = sessionManager.getSession();
+
+      // Try to authenticate again while first is in progress (line 71)
+      await expect(sessionManager.getSession()).rejects.toThrow(
+        'Authentication already in progress',
+      );
+    });
+
+    test('uses default context parameter when not provided', async () => {
+      storeValues['_kostal_session'] = {
+        sessionId: 'valid-session',
+        createdAt: Date.now(),
+      };
+
+      const sessionManager = new SessionManager('192.168.1.100', 'password', mockStorage);
+      const apiCall = jest.fn().mockResolvedValue('api-result');
+
+      // Call without context parameter - should use default 'API'
+      const result = await sessionManager.executeWithAuthRecovery(apiCall);
+
+      expect(result).toBe('api-result');
+      expect(apiCall).toHaveBeenCalledWith('valid-session');
     });
   });
 });

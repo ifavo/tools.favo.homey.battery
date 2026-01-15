@@ -7,8 +7,10 @@ import {
   createDefaultSchedule,
   formatScheduleForLog,
   SCHEDULE_VALUE_CHARGE_DISALLOW_USE,
+  SCHEDULE_VALUE_CHARGE_ALLOW_USE,
   SCHEDULE_VALUE_DEFAULT,
   SCHEDULE_VALUE_NO_CHARGE_ALLOW_USE,
+  SCHEDULE_VALUE_NO_CHARGE_DISALLOW_USE,
   type DaySchedule,
 } from '../logic/kostalApi/scheduleBuilder';
 import type { PriceBlock } from '../logic/lowPrice/types';
@@ -183,6 +185,85 @@ describe('Schedule Builder', () => {
 
       expect(log).toContain('MON:4cd/0ca/4nca/0ncd/88def');
       expect(log).toContain('TUE:0cd/0ca/0nca/0ncd/96def');
+    });
+
+    test('handles match returning null (|| [] fallback)', () => {
+      // Test the || [] fallback when match returns null
+      // This happens when a schedule value doesn't appear in the string
+      const schedule = createDefaultSchedule();
+      
+      // Create a schedule with a custom value that won't match any regex
+      schedule.mon = 'X'.repeat(96); // Custom value that won't match any schedule value regex
+      
+      const log = formatScheduleForLog(schedule);
+      
+      // Should handle gracefully with 0 counts for all schedule values
+      expect(log).toContain('MON:0cd/0ca/0nca/0ncd/0def');
+      expect(typeof log).toBe('string');
+    });
+
+    test('handles all schedule value types in formatScheduleForLog', () => {
+      // Test that all schedule value types are counted correctly
+      const schedule = createDefaultSchedule();
+      
+      // Create a schedule with all value types
+      schedule.mon = SCHEDULE_VALUE_CHARGE_DISALLOW_USE.repeat(10)
+        + SCHEDULE_VALUE_CHARGE_ALLOW_USE.repeat(10)
+        + SCHEDULE_VALUE_NO_CHARGE_ALLOW_USE.repeat(10)
+        + SCHEDULE_VALUE_NO_CHARGE_DISALLOW_USE.repeat(10)
+        + SCHEDULE_VALUE_DEFAULT.repeat(56);
+
+      const log = formatScheduleForLog(schedule);
+
+      expect(log).toContain('MON:10cd/10ca/10nca/10ncd/56def');
+    });
+  });
+
+  describe('getDayOfWeek fallback', () => {
+    test('handles unknown day string fallback (?? 0)', () => {
+      // Test the fallback in getDayOfWeek when dayStr is not in dayMap
+      // This requires mocking Intl.DateTimeFormat to return an invalid day string
+      const baseTime = new Date('2025-01-06T00:00:00Z').getTime();
+      const prices = Array.from({ length: 96 }, (_, i) => i + 1);
+      const blocks = createDayPriceBlocks(0, baseTime, prices);
+
+      const originalDateTimeFormat = Intl.DateTimeFormat;
+      const MockDateTimeFormat = jest.fn().mockImplementation((locale: string, options?: Intl.DateTimeFormatOptions) => {
+        if (options?.weekday === 'short') {
+          return {
+            format: jest.fn().mockReturnValue('Invalid'), // Not in dayMap
+          };
+        }
+        return new originalDateTimeFormat(locale, options);
+      });
+
+      Object.defineProperty(global, 'Intl', {
+        value: { ...Intl, DateTimeFormat: MockDateTimeFormat },
+        writable: true,
+        configurable: true,
+      });
+
+      try {
+        // Should not crash and should fallback to Sunday (day 0)
+        const schedule = buildPriceBasedSchedule(blocks, {
+          cheapestBlocksCount: 4,
+          expensiveBlocksCount: 0,
+          cheapestBlocksValue: '4',
+          expensiveBlocksValue: '1',
+          standardStateValue: '0',
+          timezone: 'UTC',
+        });
+
+        // Should produce a valid schedule (fallback to Sunday)
+        expect(schedule.mon).toBeDefined();
+        expect(schedule.mon.length).toBe(96);
+      } finally {
+        Object.defineProperty(global, 'Intl', {
+          value: { ...Intl, DateTimeFormat: originalDateTimeFormat },
+          writable: true,
+          configurable: true,
+        });
+      }
     });
   });
 });

@@ -57,9 +57,9 @@ export function calculateRemainingMinutes(
  * @param manualOverrideTimestamp - Timestamp when manual override was activated (undefined if not active)
  * @returns Expiration timestamp in milliseconds, or undefined if not active
  */
-export function calculateExpirationTime(manualOverrideTimestamp: number | undefined): number | undefined {
+export function calculateExpirationTime(manualOverrideTimestamp: number | undefined): number {
   if (!manualOverrideTimestamp) {
-    return undefined;
+    return 0;
   }
   return manualOverrideTimestamp + MANUAL_OVERRIDE_DURATION;
 }
@@ -118,7 +118,7 @@ export function getManualOverrideState(
   const timeSinceManual = now - manualOverrideTimestamp;
   const isActive = isManualOverrideActive(manualOverrideTimestamp, now);
   const remainingMinutes = calculateRemainingMinutes(manualOverrideTimestamp, now);
-  const expirationTime = calculateExpirationTime(manualOverrideTimestamp) || 0;
+  const expirationTime = calculateExpirationTime(manualOverrideTimestamp);
 
   return {
     isActive,

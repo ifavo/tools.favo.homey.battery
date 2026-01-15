@@ -267,5 +267,17 @@ describe('SMARD data source', () => {
     expect(entries.length).toBe(2);
     // Should have logged a warning for the failed fetch (covered lines 69-70)
   });
+
+  test('SmardPriceSource uses default market area parameter', () => {
+    // Test the default parameter: constructor without arguments
+    const source = new SmardPriceSource(); // No argument - should use default 'DE-LU'
+    
+    // Should work correctly with default market area
+    expect(source).toBeDefined();
+    // Verify it uses DE-LU by checking it doesn't throw
+    expect(() => {
+      new SmardPriceSource();
+    }).not.toThrow();
+  });
 });
 

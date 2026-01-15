@@ -9,6 +9,7 @@ import {
   buildSchedulePayload,
   buildChargingOffPayload,
   fetchSettings,
+  setMinHomeConsumption,
 } from '../../logic/kostalApi/apiClient';
 import {
   buildPriceBasedSchedule,
@@ -33,6 +34,7 @@ import {
   MILLISECONDS_PER_MINUTE,
   MILLISECONDS_PER_HOUR,
 } from '../../logic/utils/dateUtils';
+import { detectTimeFrame, type TimeFrame } from '../../logic/utils/timeFrameDetector';
 
 /**
  * Kostal Battery Device
@@ -44,15 +46,23 @@ class KostalBatteryDevice extends Homey.Device {
   private priceSource!: PriceDataSource;
   private pollingInterval?: NodeJS.Timeout;
   private priceUpdateInterval?: NodeJS.Timeout;
+  private minHomeConsumptionCheckInterval?: NodeJS.Timeout;
 
   private readonly POLL_INTERVAL = 60 * 1000; // 60 seconds
   private readonly PRICE_UPDATE_INTERVAL = MILLISECONDS_PER_HOUR; // Update schedule hourly
   private readonly MANUAL_OVERRIDE_DURATION = 15 * MILLISECONDS_PER_MINUTE;
+  private readonly MIN_HOME_CONS_CHECK_INTERVAL = 15 * MILLISECONDS_PER_MINUTE; // Check every 15 minutes
 
   // Current settings (to detect changes and avoid unnecessary API calls)
   private currentSchedule?: DaySchedule;
   private currentConfig?: ChargingConfig;
   private manualOverrideTimestamp?: number;
+
+  // Schedule values for time frame detection
+  private cheapestBlocksValue?: string;
+  private expensiveBlocksValue?: string;
+  private standardStateValue?: string;
+  private lastCheckedTimeFrame?: TimeFrame;
 
   /**
    * onInit is called when the device is initialized.
@@ -91,6 +101,9 @@ class KostalBatteryDevice extends Homey.Device {
     // Start price-based schedule updates (always enabled)
     await this.startScheduleUpdates();
 
+    // Start min home consumption check interval
+    await this.startMinHomeConsumptionChecks();
+
     this.log('[INIT] Device initialization completed');
   }
 
@@ -100,6 +113,7 @@ class KostalBatteryDevice extends Homey.Device {
   async onDeleted(): Promise<void> {
     this.stopPolling();
     this.stopScheduleUpdates();
+    this.stopMinHomeConsumptionChecks();
     this.log('KostalBatteryDevice has been deleted');
   }
 
@@ -163,6 +177,25 @@ class KostalBatteryDevice extends Homey.Device {
 
       // Always update schedule (feature is always enabled)
       await this.updateScheduleFromPrices(event.newSettings);
+    }
+
+    // If time-based discharge settings changed, trigger immediate check
+    const dischargeSettings = [
+      'min_home_consumption_cheapest',
+      'min_home_consumption_standard',
+      'min_home_consumption_expensive',
+    ];
+    const hasDischargeChange = dischargeSettings.some((s) => event.changedKeys.includes(s));
+
+    if (hasDischargeChange) {
+      // Reset last checked time frame to force immediate check
+      this.lastCheckedTimeFrame = undefined;
+      try {
+        // Pass newSettings to use the updated values immediately
+        await this.checkAndUpdateMinHomeConsumption(event.newSettings);
+      } catch (error: unknown) {
+        this.error('[SETTINGS] Failed to update min home consumption after settings change:', extractErrorMessage(error));
+      }
     }
   }
 
@@ -308,6 +341,179 @@ class KostalBatteryDevice extends Homey.Device {
     if (this.priceUpdateInterval) {
       this.homey.clearInterval(this.priceUpdateInterval);
       this.priceUpdateInterval = undefined;
+    }
+  }
+
+  /**
+   * Start min home consumption check interval
+   */
+  async startMinHomeConsumptionChecks(): Promise<void> {
+    this.stopMinHomeConsumptionChecks();
+
+    // Initial check
+    try {
+      await this.checkAndUpdateMinHomeConsumption();
+    } catch (error: unknown) {
+      this.error('[MIN_HOME_CONS] Initial check failed:', extractErrorMessage(error));
+    }
+
+    // Set up 15-minute interval
+    this.minHomeConsumptionCheckInterval = this.homey.setInterval(() => {
+      this.checkAndUpdateMinHomeConsumption().catch((error: unknown) => {
+        this.error('[MIN_HOME_CONS] Check failed:', extractErrorMessage(error));
+      });
+    }, this.MIN_HOME_CONS_CHECK_INTERVAL);
+
+    this.log(`[MIN_HOME_CONS] Started check interval (every ${this.MIN_HOME_CONS_CHECK_INTERVAL / MILLISECONDS_PER_MINUTE} min)`);
+  }
+
+  /**
+   * Stop min home consumption checks
+   */
+  stopMinHomeConsumptionChecks(): void {
+    if (this.minHomeConsumptionCheckInterval) {
+      this.homey.clearInterval(this.minHomeConsumptionCheckInterval);
+      this.minHomeConsumptionCheckInterval = undefined;
+    }
+  }
+
+  /**
+   * Get the desired min home consumption value for the current time frame
+   * @param settingsOverride - Optional settings override to use instead of getSetting()
+   */
+  private getCurrentTimeFrameValue(settingsOverride?: Record<string, unknown>): number | null {
+    if (!this.currentSchedule || !this.cheapestBlocksValue || !this.expensiveBlocksValue) {
+      // Fallback to legacy setting if schedule not available
+      const legacyValue = settingsOverride?.min_home_consumption ?? this.getSetting('min_home_consumption');
+      return (legacyValue as number) || 50;
+    }
+
+    const timezone = this.resolveTimezone(
+      (settingsOverride?.price_timezone ?? this.getSetting('price_timezone')) as string,
+    );
+    const now = Date.now();
+    const timeFrame = detectTimeFrame(
+      this.currentSchedule,
+      now,
+      timezone,
+      this.cheapestBlocksValue,
+      this.expensiveBlocksValue,
+    );
+
+    let settingKey: string;
+    switch (timeFrame) {
+      case 'cheapest':
+        settingKey = 'min_home_consumption_cheapest';
+        break;
+      case 'expensive':
+        settingKey = 'min_home_consumption_expensive';
+        break;
+      case 'standard':
+      default:
+        settingKey = 'min_home_consumption_standard';
+        break;
+    }
+
+    // Use override if provided, otherwise get from settings
+    const value = settingsOverride?.[settingKey] ?? this.getSetting(settingKey);
+    if (value !== undefined && value !== null) {
+      return Number(value);
+    }
+
+    // Fallback to legacy setting
+    const legacyValue = settingsOverride?.min_home_consumption ?? this.getSetting('min_home_consumption');
+    return (legacyValue as number) || 50;
+  }
+
+  /**
+   * Check current inverter setting and update if needed
+   * @param settingsOverride - Optional settings override to use instead of getSetting()
+   */
+  async checkAndUpdateMinHomeConsumption(settingsOverride?: Record<string, unknown>): Promise<void> {
+    if (!this.currentSchedule || !this.cheapestBlocksValue || !this.expensiveBlocksValue) {
+      this.log('[MIN_HOME_CONS] Schedule not available, skipping check');
+      return;
+    }
+
+    const ip = this.getSetting('ip') as string;
+    if (!ip) {
+      this.log('[MIN_HOME_CONS] IP not configured, skipping check');
+      return;
+    }
+
+    const desiredValue = this.getCurrentTimeFrameValue(settingsOverride);
+    if (desiredValue === null) {
+      this.log('[MIN_HOME_CONS] Could not determine desired value, skipping check');
+      return;
+    }
+
+    const timezone = this.resolveTimezone(this.getSetting('price_timezone'));
+    const now = Date.now();
+    const currentTimeFrame = detectTimeFrame(
+      this.currentSchedule,
+      now,
+      timezone,
+      this.cheapestBlocksValue,
+      this.expensiveBlocksValue,
+    );
+
+    try {
+      // Fetch current inverter setting
+      const currentModules = await this.sessionManager.executeWithAuthRecovery(
+        (sessionId) => fetchSettings(ip, sessionId, [
+          {
+            moduleid: 'devices:local',
+            settingids: ['Battery:MinHomeComsumption'],
+          },
+        ]),
+        'MIN_HOME_CONS_CHECK',
+      );
+
+      const currentSetting = currentModules[0]?.settings?.find(
+        (s) => s.id === 'Battery:MinHomeComsumption',
+      );
+
+      const currentValue = currentSetting ? Number(currentSetting.value) : null;
+
+      if (currentValue === null) {
+        this.log('[MIN_HOME_CONS] Could not read current inverter setting');
+        return;
+      }
+
+      // Compare values (with small tolerance for floating point)
+      if (Math.abs(currentValue - desiredValue) < 0.5) {
+        this.log(
+          `[MIN_HOME_CONS] Setting already correct: ${currentValue}W (time frame: ${currentTimeFrame})`,
+        );
+        this.lastCheckedTimeFrame = currentTimeFrame;
+        return;
+      }
+
+      // Update setting
+      const timeFrameChanged = this.lastCheckedTimeFrame !== currentTimeFrame;
+      if (timeFrameChanged) {
+        this.log(
+          `[MIN_HOME_CONS] Time frame changed to ${currentTimeFrame}, updating from ${currentValue}W to ${desiredValue}W`,
+        );
+      } else {
+        this.log(
+          `[MIN_HOME_CONS] Setting differs from desired value, updating from ${currentValue}W to ${desiredValue}W (time frame: ${currentTimeFrame})`,
+        );
+      }
+
+      await this.sessionManager.executeWithAuthRecovery(
+        (sessionId) => setMinHomeConsumption(ip, sessionId, desiredValue),
+        'MIN_HOME_CONS_UPDATE',
+      );
+
+      this.lastCheckedTimeFrame = currentTimeFrame;
+      await this.updateLastApiUpdateTime();
+
+      this.log(`[MIN_HOME_CONS] Successfully updated to ${desiredValue}W`);
+    } catch (error: unknown) {
+      const errorMessage = extractErrorMessage(error);
+      this.error(`[MIN_HOME_CONS] Error checking/updating setting: ${errorMessage}`);
+      throw error;
     }
   }
 
@@ -517,6 +723,11 @@ class KostalBatteryDevice extends Homey.Device {
         settingsOverride.price_timezone ?? this.getSetting('price_timezone'),
       );
 
+      // Store schedule values for time frame detection
+      this.cheapestBlocksValue = cheapestBlocksValue;
+      this.expensiveBlocksValue = expensiveBlocksValue;
+      this.standardStateValue = standardStateValue;
+
       this.log(`[PRICE] Fetching prices... (cheapest=${cheapestBlocksCount}, expensive=${expensiveBlocksCount}, tz=${timezone})`);
 
       // Fetch prices
@@ -646,6 +857,13 @@ class KostalBatteryDevice extends Homey.Device {
       await this.updateLastApiUpdateTime();
 
       this.log(`[SCHEDULE] Successfully applied: ${formatScheduleForLog(newSchedule)}`);
+
+      // Check and update min home consumption after schedule update
+      try {
+        await this.checkAndUpdateMinHomeConsumption();
+      } catch (error: unknown) {
+        this.error('[SCHEDULE] Failed to update min home consumption after schedule update:', extractErrorMessage(error));
+      }
 
     } catch (error: unknown) {
       const errorMessage = extractErrorMessage(error);

@@ -10,9 +10,18 @@ import {
   deriveProtocolKey,
   aesGcmEncrypt,
   buildAuthMessage,
+  performScramAuth,
 } from '../logic/kostalApi/scramAuth';
 
+// Mock fetch globally
+global.fetch = jest.fn();
+
 describe('SCRAM Authentication', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    (global.fetch as jest.Mock).mockClear();
+  });
+
   describe('pbkdf2SaltedPassword', () => {
     test('generates consistent salted password', () => {
       const password = 'testpassword';
@@ -207,6 +216,365 @@ describe('SCRAM Authentication', () => {
       expect(authMsg).toContain(`s=${saltB64}`);
       expect(authMsg).toContain(`i=${iterations}`);
       expect(authMsg).toContain('c=biws');
+    });
+  });
+
+  describe('performScramAuth', () => {
+    const mockIp = '192.168.5.48';
+    const mockPassword = 'testpassword';
+    const mockRole = 'user';
+    const mockSNonce = 'servernonce456';
+    const mockSaltB64 = Buffer.from('testsalt12345678').toString('base64'); // Valid base64
+    const mockRounds = '1000';
+    const mockTxId = 'transaction-123';
+    const mockToken = 'auth-token-abc';
+    const mockSessionId = 'session-xyz';
+
+    test('performs full authentication flow successfully', async () => {
+      // Mock auth/start response
+      const mockStartResponse = {
+        ok: true,
+        json: jest.fn().mockResolvedValue({
+          transactionId: mockTxId,
+          nonce: mockSNonce,
+          salt: mockSaltB64,
+          rounds: mockRounds,
+        }),
+      } as unknown as Response;
+
+      // Mock auth/finish response (no signature to skip verification)
+      const mockFinishResponse = {
+        ok: true,
+        json: jest.fn().mockResolvedValue({
+          token: mockToken,
+          // No signature - will skip verification (line 183)
+        }),
+      } as unknown as Response;
+
+      // Mock session creation response
+      const mockSessionResponse = {
+        ok: true,
+        json: jest.fn().mockResolvedValue({
+          sessionId: mockSessionId,
+        }),
+      } as unknown as Response;
+
+      (global.fetch as jest.Mock)
+        .mockResolvedValueOnce(mockStartResponse)
+        .mockResolvedValueOnce(mockFinishResponse)
+        .mockResolvedValueOnce(mockSessionResponse);
+
+      const result = await performScramAuth(mockIp, mockPassword, mockRole);
+
+      expect(result).toBe(mockSessionId);
+      expect(global.fetch).toHaveBeenCalledTimes(3);
+      
+      // Verify auth/start call
+      expect(global.fetch).toHaveBeenNthCalledWith(
+        1,
+        `http://${mockIp}/api/v1/auth/start`,
+        expect.objectContaining({
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+
+      // Verify auth/finish call
+      expect(global.fetch).toHaveBeenNthCalledWith(
+        2,
+        `http://${mockIp}/api/v1/auth/finish`,
+        expect.objectContaining({
+          method: 'POST',
+        }),
+      );
+
+      // Verify session creation call
+      expect(global.fetch).toHaveBeenNthCalledWith(
+        3,
+        `http://${mockIp}/api/v1/auth/create_session`,
+        expect.objectContaining({
+          method: 'POST',
+        }),
+      );
+    });
+
+    test('handles auth/start failure', async () => {
+      const mockStartResponse = {
+        ok: false,
+        status: 401,
+        text: jest.fn().mockResolvedValue('Unauthorized'),
+      } as unknown as Response;
+
+      (global.fetch as jest.Mock).mockResolvedValue(mockStartResponse);
+
+      await expect(performScramAuth(mockIp, mockPassword, mockRole)).rejects.toThrow(
+        'Auth start failed (401)',
+      );
+    });
+
+    test('handles auth/finish failure', async () => {
+      const mockStartResponse = {
+        ok: true,
+        json: jest.fn().mockResolvedValue({
+          transactionId: mockTxId,
+          nonce: mockSNonce,
+          salt: mockSaltB64,
+          rounds: mockRounds,
+        }),
+      } as unknown as Response;
+
+      const mockFinishResponse = {
+        ok: false,
+        status: 403,
+        text: jest.fn().mockResolvedValue('Forbidden'),
+      } as unknown as Response;
+
+      (global.fetch as jest.Mock)
+        .mockResolvedValueOnce(mockStartResponse)
+        .mockResolvedValueOnce(mockFinishResponse);
+
+      await expect(performScramAuth(mockIp, mockPassword, mockRole)).rejects.toThrow(
+        'Auth finish failed (403)',
+      );
+    });
+
+    test('handles missing token in auth/finish response', async () => {
+      const mockStartResponse = {
+        ok: true,
+        json: jest.fn().mockResolvedValue({
+          transactionId: mockTxId,
+          nonce: mockSNonce,
+          salt: mockSaltB64,
+          rounds: mockRounds,
+        }),
+      } as unknown as Response;
+
+      const mockFinishResponse = {
+        ok: true,
+        json: jest.fn().mockResolvedValue({
+          // Missing token
+          signature: 'mock-signature',
+        }),
+      } as unknown as Response;
+
+      (global.fetch as jest.Mock)
+        .mockResolvedValueOnce(mockStartResponse)
+        .mockResolvedValueOnce(mockFinishResponse);
+
+      await expect(performScramAuth(mockIp, mockPassword, mockRole)).rejects.toThrow(
+        'No token received',
+      );
+    });
+
+    test('verifies server signature when provided (signature mismatch)', async () => {
+      const mockStartResponse = {
+        ok: true,
+        json: jest.fn().mockResolvedValue({
+          transactionId: mockTxId,
+          nonce: mockSNonce,
+          salt: mockSaltB64,
+          rounds: mockRounds,
+        }),
+      } as unknown as Response;
+
+      // Provide an invalid signature to test the verification path
+      const mockFinishResponse = {
+        ok: true,
+        json: jest.fn().mockResolvedValue({
+          token: mockToken,
+          signature: 'invalid-signature-base64', // Will fail verification
+        }),
+      } as unknown as Response;
+
+      (global.fetch as jest.Mock)
+        .mockResolvedValueOnce(mockStartResponse)
+        .mockResolvedValueOnce(mockFinishResponse);
+
+      // This tests that signature verification happens (line 183-187)
+      await expect(performScramAuth(mockIp, mockPassword, mockRole)).rejects.toThrow(
+        'Server signature mismatch',
+      );
+    });
+
+    test('skips signature verification when signature not provided', async () => {
+      const mockStartResponse = {
+        ok: true,
+        json: jest.fn().mockResolvedValue({
+          transactionId: mockTxId,
+          nonce: mockSNonce,
+          salt: mockSaltB64,
+          rounds: mockRounds,
+        }),
+      } as unknown as Response;
+
+      const mockFinishResponse = {
+        ok: true,
+        json: jest.fn().mockResolvedValue({
+          token: mockToken,
+          // No signature property - should skip verification (line 183 check)
+        }),
+      } as unknown as Response;
+
+      const mockSessionResponse = {
+        ok: true,
+        json: jest.fn().mockResolvedValue({
+          sessionId: mockSessionId,
+        }),
+      } as unknown as Response;
+
+      (global.fetch as jest.Mock)
+        .mockResolvedValueOnce(mockStartResponse)
+        .mockResolvedValueOnce(mockFinishResponse)
+        .mockResolvedValueOnce(mockSessionResponse);
+
+      // Should succeed without signature verification
+      const result = await performScramAuth(mockIp, mockPassword, mockRole);
+      expect(result).toBe(mockSessionId);
+    });
+
+    test('handles session creation failure', async () => {
+      const mockStartResponse = {
+        ok: true,
+        json: jest.fn().mockResolvedValue({
+          transactionId: mockTxId,
+          nonce: mockSNonce,
+          salt: mockSaltB64,
+          rounds: mockRounds,
+        }),
+      } as unknown as Response;
+
+      const mockFinishResponse = {
+        ok: true,
+        json: jest.fn().mockResolvedValue({
+          token: mockToken,
+          // No signature to skip verification
+        }),
+      } as unknown as Response;
+
+      const mockSessionResponse = {
+        ok: false,
+        status: 500,
+        text: jest.fn().mockResolvedValue('Internal Server Error'),
+      } as unknown as Response;
+
+      (global.fetch as jest.Mock)
+        .mockResolvedValueOnce(mockStartResponse)
+        .mockResolvedValueOnce(mockFinishResponse)
+        .mockResolvedValueOnce(mockSessionResponse);
+
+      await expect(performScramAuth(mockIp, mockPassword, mockRole)).rejects.toThrow(
+        'Session creation failed (500)',
+      );
+    });
+
+    test('handles missing sessionId in session response', async () => {
+      const mockStartResponse = {
+        ok: true,
+        json: jest.fn().mockResolvedValue({
+          transactionId: mockTxId,
+          nonce: mockSNonce,
+          salt: mockSaltB64,
+          rounds: mockRounds,
+        }),
+      } as unknown as Response;
+
+      const mockFinishResponse = {
+        ok: true,
+        json: jest.fn().mockResolvedValue({
+          token: mockToken,
+          // No signature property to skip verification
+        }),
+      } as unknown as Response;
+
+      const mockSessionResponse = {
+        ok: true,
+        json: jest.fn().mockResolvedValue({
+          // Missing sessionId property (line 212-213)
+        }),
+      } as unknown as Response;
+
+      (global.fetch as jest.Mock)
+        .mockResolvedValueOnce(mockStartResponse)
+        .mockResolvedValueOnce(mockFinishResponse)
+        .mockResolvedValueOnce(mockSessionResponse);
+
+      await expect(performScramAuth(mockIp, mockPassword, mockRole)).rejects.toThrow(
+        'No sessionId received',
+      );
+    });
+
+    test('works without server signature verification', async () => {
+      const mockStartResponse = {
+        ok: true,
+        json: jest.fn().mockResolvedValue({
+          transactionId: mockTxId,
+          nonce: mockSNonce,
+          salt: mockSaltB64,
+          rounds: mockRounds,
+        }),
+      } as unknown as Response;
+
+      const mockFinishResponse = {
+        ok: true,
+        json: jest.fn().mockResolvedValue({
+          token: mockToken,
+          // No signature property - should skip verification
+        }),
+      } as unknown as Response;
+
+      const mockSessionResponse = {
+        ok: true,
+        json: jest.fn().mockResolvedValue({
+          sessionId: mockSessionId,
+        }),
+      } as unknown as Response;
+
+      (global.fetch as jest.Mock)
+        .mockResolvedValueOnce(mockStartResponse)
+        .mockResolvedValueOnce(mockFinishResponse)
+        .mockResolvedValueOnce(mockSessionResponse);
+
+      const result = await performScramAuth(mockIp, mockPassword, mockRole);
+      expect(result).toBe(mockSessionId);
+    });
+
+    test('uses default role "user" when not specified', async () => {
+      const mockStartResponse = {
+        ok: true,
+        json: jest.fn().mockResolvedValue({
+          transactionId: mockTxId,
+          nonce: mockSNonce,
+          salt: mockSaltB64,
+          rounds: mockRounds,
+        }),
+      } as unknown as Response;
+
+      const mockFinishResponse = {
+        ok: true,
+        json: jest.fn().mockResolvedValue({
+          token: mockToken,
+        }),
+      } as unknown as Response;
+
+      const mockSessionResponse = {
+        ok: true,
+        json: jest.fn().mockResolvedValue({
+          sessionId: mockSessionId,
+        }),
+      } as unknown as Response;
+
+      (global.fetch as jest.Mock)
+        .mockResolvedValueOnce(mockStartResponse)
+        .mockResolvedValueOnce(mockFinishResponse)
+        .mockResolvedValueOnce(mockSessionResponse);
+
+      const result = await performScramAuth(mockIp, mockPassword); // No role specified
+
+      expect(result).toBe(mockSessionId);
+      // Verify auth/start was called with username: 'user' (default)
+      const startCall = (global.fetch as jest.Mock).mock.calls[0];
+      const startBody = JSON.parse(startCall[1]?.body);
+      expect(startBody.username).toBe('user');
     });
   });
 });

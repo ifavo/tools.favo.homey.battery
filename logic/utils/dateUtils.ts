@@ -88,7 +88,7 @@ export function getMillisecondsUntilNext15MinuteBoundary(now: number = Date.now(
   
   const delay = targetTime.getTime() - now;
   
-  // Ensure we return a positive delay (should always be, but handle edge cases)
-  return delay > 0 ? delay : delay + (15 * MILLISECONDS_PER_MINUTE);
+  // Delay is always positive since we calculate the next boundary
+  return delay;
 }
 

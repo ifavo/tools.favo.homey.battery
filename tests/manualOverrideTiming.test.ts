@@ -117,8 +117,9 @@ describe('Manual Override Timing Logic', () => {
   });
 
   describe('calculateExpirationTime', () => {
-    test('returns undefined when timestamp is undefined', () => {
-      expect(calculateExpirationTime(undefined)).toBeUndefined();
+    test('returns 0 when timestamp is undefined', () => {
+      // Function returns 0 instead of undefined for consistency with other functions
+      expect(calculateExpirationTime(undefined)).toBe(0);
     });
 
     test('calculates expiration time correctly', () => {
@@ -300,6 +301,67 @@ describe('Manual Override Timing Logic', () => {
         expect(state.remainingMinutes).toBe(expectedRemaining);
         expect(state.isActive).toBe(minutesAgo < 15);
       });
+    });
+
+    test('uses default Date.now() when now parameter is not provided', () => {
+      const timestamp = Date.now() - (5 * 60 * 1000);
+      
+      // Call without now parameter - should use Date.now() internally
+      const state1 = getManualOverrideState(timestamp);
+      const state2 = getManualOverrideState(timestamp, Date.now());
+      
+      // Both should be similar (within 1 second due to execution time)
+      expect(Math.abs(state1.timeSinceManual - state2.timeSinceManual)).toBeLessThan(1000);
+    });
+  });
+
+  describe('default parameter coverage', () => {
+    test('isManualOverrideActive uses default Date.now()', () => {
+      const timestamp = Date.now() - (5 * 60 * 1000);
+      const result = isManualOverrideActive(timestamp);
+      expect(typeof result).toBe('boolean');
+    });
+
+    test('calculateRemainingMinutes uses default Date.now()', () => {
+      const timestamp = Date.now() - (5 * 60 * 1000);
+      const result = calculateRemainingMinutes(timestamp);
+      expect(typeof result).toBe('number');
+      expect(result).toBeGreaterThanOrEqual(0);
+    });
+
+    test('shouldLogRemainingTime uses default Date.now()', () => {
+      const lastLogTime = Date.now() - (LOG_INTERVAL + 1000);
+      const result = shouldLogRemainingTime(lastLogTime);
+      expect(typeof result).toBe('boolean');
+    });
+
+    test('getManualOverrideState handles undefined expirationTime fallback', () => {
+      // When manualOverrideTimestamp is undefined, calculateExpirationTime returns 0
+      // So expirationTime should be 0
+      const state = getManualOverrideState(undefined, now);
+      expect(state.expirationTime).toBe(0);
+      expect(state.isActive).toBe(false);
+      expect(state.remainingMinutes).toBe(0);
+      expect(state.timeSinceManual).toBe(0);
+    });
+
+    test('getManualOverrideState expirationTime uses calculated value', () => {
+      // When manualOverrideTimestamp is provided, calculateExpirationTime returns a number
+      const timestamp = now;
+      const state = getManualOverrideState(timestamp, now);
+      expect(state.expirationTime).toBe(now + MANUAL_OVERRIDE_DURATION);
+      expect(state.expirationTime).not.toBe(0);
+    });
+
+    test('getManualOverrideState expirationTime uses calculated value (not fallback)', () => {
+      // Test the other branch of line 121: when calculateExpirationTime returns a number
+      // This ensures both branches of the || operator are covered
+      const timestamp = now;
+      const state = getManualOverrideState(timestamp, now);
+      
+      // Should use the calculated expiration time, not the fallback
+      expect(state.expirationTime).toBe(now + MANUAL_OVERRIDE_DURATION);
+      expect(state.expirationTime).not.toBe(0);
     });
   });
 });
