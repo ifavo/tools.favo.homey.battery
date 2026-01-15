@@ -319,17 +319,17 @@ class KostalBatteryDevice extends Homey.Device {
   async startScheduleUpdates(): Promise<void> {
     this.stopScheduleUpdates();
 
-    // Initial schedule update
+    // Initial schedule update with force refresh to get latest data on app start
     try {
-      await this.updateScheduleFromPrices();
+      await this.updateScheduleFromPrices({}, true);
     } catch (error: unknown) {
       this.error('[SCHEDULE] Initial schedule update failed:', extractErrorMessage(error));
     }
 
-    // Set up hourly interval for schedule updates
-    // This is less frequent since we're setting the full day's schedule
+    // Set up hourly interval for schedule updates with force refresh
+    // This ensures we always get the latest price data, even if cache is still valid
     this.priceUpdateInterval = this.homey.setInterval(() => {
-      this.updateScheduleFromPrices().catch((error: unknown) => {
+      this.updateScheduleFromPrices({}, true).catch((error: unknown) => {
         this.error('[SCHEDULE] Schedule update failed:', extractErrorMessage(error));
       });
     }, this.PRICE_UPDATE_INTERVAL);
@@ -702,9 +702,12 @@ class KostalBatteryDevice extends Homey.Device {
 
   /**
    * Update inverter schedule based on current prices
+   * @param settingsOverride - Optional settings to override device settings
+   * @param forceRefresh - If true, force refresh price data from source (bypass cache)
    */
   async updateScheduleFromPrices(
     settingsOverride: Partial<Record<string, unknown>> = {},
+    forceRefresh: boolean = false,
   ): Promise<void> {
     try {
       const cheapestBlocksCount = Number(
@@ -733,15 +736,23 @@ class KostalBatteryDevice extends Homey.Device {
 
       this.log(`[PRICE] Fetching prices... (cheapest=${cheapestBlocksCount}, expensive=${expensiveBlocksCount}, tz=${timezone})`);
 
-      // Fetch prices
+      // Fetch prices (force refresh if requested to get latest data)
       const now = Date.now();
-      const priceData = await this.priceSource.fetch();
+      // CachedPriceSource supports forceRefresh parameter
+      const priceData = await (this.priceSource as { fetch(forceRefresh?: boolean): Promise<Array<{ date: string; price: number }>> }).fetch(forceRefresh);
 
       this.log(`[PRICE] Received ${priceData.length} price entries from SMARD`);
 
       if (priceData.length === 0) {
         this.error('[PRICE] No price data available!');
         return;
+      }
+
+      // Log date range of price data
+      if (priceData.length > 0) {
+        const firstDate = new Date(priceData[0].date);
+        const lastDate = new Date(priceData[priceData.length - 1].date);
+        this.log(`[PRICE] Date range: ${firstDate.toISOString().split('T')[0]} to ${lastDate.toISOString().split('T')[0]}`);
       }
 
       // Convert PriceDataEntry to PriceBlock format
@@ -774,6 +785,27 @@ class KostalBatteryDevice extends Homey.Device {
       });
       await this.setCapabilityValue('next_charging_times', nextTimesText).catch(() => { });
 
+      // Log block distribution by day for debugging
+      const dayNamesForLog = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      const blocksByDay: Record<number, PriceBlock[]> = {
+        0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: [],
+      };
+      for (const block of priceBlocks) {
+        const date = new Date(block.start);
+        const formatter = new Intl.DateTimeFormat('en-US', {
+          timeZone: timezone,
+          weekday: 'short',
+        });
+        const dayStr = formatter.format(date);
+        const dayMap: Record<string, number> = {
+          'Sun': 0, 'Mon': 1, 'Tue': 2, 'Wed': 3, 'Thu': 4, 'Fri': 5, 'Sat': 6,
+        };
+        const dayOfWeek = dayMap[dayStr] ?? 0;
+        blocksByDay[dayOfWeek].push(block);
+      }
+      const dayBlockCounts = dayNamesForLog.map((name, idx) => `${name}:${blocksByDay[idx].length}`).join(' ');
+      this.log(`[SCHEDULE] Price blocks by day: ${dayBlockCounts}`);
+
       // Build price-based schedule
       this.log('[SCHEDULE] Building price-based schedule...');
       const newSchedule = buildPriceBasedSchedule(priceBlocks, {
@@ -788,7 +820,7 @@ class KostalBatteryDevice extends Homey.Device {
       // Log schedule summary for today
       const countChars = (s: string, c: string) => (s.match(new RegExp(c, 'g')) || []).length;
       const dayNames = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const;
-      const todayDayName = dayNames[new Date().getDay()];
+      const todayDayName = dayNames[new Date().getDay()] as keyof DaySchedule;
       const todaySchedule = newSchedule[todayDayName];
       const chargeDisallowCount = countChars(todaySchedule, SCHEDULE_VALUE_CHARGE_DISALLOW_USE);
       const chargeAllowCount = countChars(todaySchedule, SCHEDULE_VALUE_CHARGE_ALLOW_USE);

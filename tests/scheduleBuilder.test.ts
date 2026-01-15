@@ -95,23 +95,74 @@ describe('Schedule Builder', () => {
     test('cheapest blocks take priority over expensive', () => {
       const baseTime = new Date('2025-01-06T00:00:00Z').getTime();
 
-      // Create blocks where same block would be both cheapest and expensive
-      // (edge case with very few blocks)
-      const prices = [1, 2]; // Only 2 blocks
+      // Create 96 blocks where same blocks would be both cheapest and expensive
+      // (edge case where cheapestBlocksCount + expensiveBlocksCount >= 96)
+      const prices = Array.from({ length: 96 }, (_, i) => i < 2 ? 1 : i + 1);
       const blocks = createDayPriceBlocks(0, baseTime, prices);
 
       const schedule = buildPriceBasedSchedule(blocks, {
-        cheapestBlocksCount: 2,
-        expensiveBlocksCount: 2,
+        cheapestBlocksCount: 50,
+        expensiveBlocksCount: 50,
         cheapestBlocksValue: '4',
         expensiveBlocksValue: '1',
         standardStateValue: '0',
         timezone: 'UTC',
       });
 
-      // Both blocks should be charge value (cheap takes priority)
+      // First 2 blocks should be charge value (cheap takes priority)
       expect(schedule.mon[0]).toBe(SCHEDULE_VALUE_CHARGE_DISALLOW_USE);
       expect(schedule.mon[1]).toBe(SCHEDULE_VALUE_CHARGE_DISALLOW_USE);
+    });
+
+    test('skips days with partial data (less than 96 blocks)', () => {
+      const baseTime = new Date('2025-01-06T00:00:00Z').getTime();
+
+      // Create only 48 blocks for Monday (half a day)
+      const prices = Array.from({ length: 48 }, (_, i) => i + 1);
+      const blocks = createDayPriceBlocks(0, baseTime, prices);
+
+      const schedule = buildPriceBasedSchedule(blocks, {
+        cheapestBlocksCount: 4,
+        expensiveBlocksCount: 4,
+        cheapestBlocksValue: '4',
+        expensiveBlocksValue: '1',
+        standardStateValue: '0',
+        timezone: 'UTC',
+      });
+
+      // Monday should remain with default values (not processed due to incomplete data)
+      expect(schedule.mon).toBe(SCHEDULE_VALUE_DEFAULT.repeat(96));
+    });
+
+    test('skips days with more than 96 blocks (invalid data)', () => {
+      const baseTime = new Date('2025-01-06T00:00:00Z').getTime();
+      const FIFTEEN_MINUTES_MS = 15 * 60 * 1000;
+
+      // Create 100 blocks all falling on Monday to simulate invalid data
+      // (in reality this shouldn't happen, but we test the validation)
+      const blocks: PriceBlock[] = [];
+      for (let i = 0; i < 100; i++) {
+        // All blocks fall on Monday by staying within the 24-hour window
+        // Use modulo to wrap around if needed, but keep all on Monday
+        const blockTime = baseTime + (i % 96) * FIFTEEN_MINUTES_MS;
+        blocks.push({
+          start: blockTime,
+          end: blockTime + FIFTEEN_MINUTES_MS,
+          price: i + 1,
+        });
+      }
+
+      const schedule = buildPriceBasedSchedule(blocks, {
+        cheapestBlocksCount: 4,
+        expensiveBlocksCount: 4,
+        cheapestBlocksValue: '4',
+        expensiveBlocksValue: '1',
+        standardStateValue: '0',
+        timezone: 'UTC',
+      });
+
+      // Monday should remain with default values (not processed due to invalid block count > 96)
+      expect(schedule.mon).toBe(SCHEDULE_VALUE_DEFAULT.repeat(96));
     });
 
     test('handles empty price blocks', () => {

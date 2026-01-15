@@ -111,6 +111,12 @@ function getQuarterHourIndex(timestamp: number, timezone: string): number {
 }
 
 /**
+ * Expected number of price blocks for a full day
+ * 24 hours * 4 blocks per hour (15-minute intervals) = 96 blocks
+ */
+const EXPECTED_BLOCKS_PER_DAY = 96;
+
+/**
  * Build price-based schedule for all days of the week
  * 
  * @param priceBlocks - Array of price blocks (from price source)
@@ -155,7 +161,11 @@ export function buildPriceBasedSchedule(
   // Process each day
   for (let day = 0; day < 7; day++) {
     const dayBlocks = blocksByDay[day];
-    if (dayBlocks.length === 0) continue;
+    
+    // Skip days with no data or incomplete data (must have exactly 96 blocks for a full day)
+    if (dayBlocks.length === 0 || dayBlocks.length !== EXPECTED_BLOCKS_PER_DAY) {
+      continue;
+    }
 
     // Sort by price to find cheapest and most expensive
     const sortedByPrice = [...dayBlocks].sort((a, b) => a.price - b.price);

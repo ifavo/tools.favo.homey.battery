@@ -303,5 +303,155 @@ describe('CachedPriceSource', () => {
         expect.stringContaining('[PRICE_CACHE] Cache hit'),
       );
     });
+
+    test('merges new data with existing cache on force refresh', async () => {
+      const now = Date.now();
+      const today = new Date(now);
+      today.setHours(0, 0, 0, 0);
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      
+      // Existing cache with Monday and Tuesday data
+      const existingData: Array<PriceDataEntry> = [
+        { date: today.toISOString(), price: 0.1 },
+        { date: new Date(today.getTime() + 15 * 60 * 1000).toISOString(), price: 0.12 },
+        { date: tomorrow.toISOString(), price: 0.15 },
+      ];
+      const cached = {
+        data: existingData,
+        timestamp: now - MILLISECONDS_PER_HOUR,
+        marketArea: 'DE-LU',
+      };
+      storeValues['price_cache_DE-LU'] = cached;
+
+      // New data with Tuesday and Wednesday data
+      const newData: Array<PriceDataEntry> = [
+        { date: tomorrow.toISOString(), price: 0.16 }, // Overwrites existing Tuesday entry
+        { date: new Date(tomorrow.getTime() + 15 * 60 * 1000).toISOString(), price: 0.17 }, // New entry
+        { date: new Date(tomorrow.getTime() + 1 * 24 * 60 * 60 * 1000).toISOString(), price: 0.18 }, // Wednesday
+      ];
+      (mockSource.fetch as jest.Mock).mockResolvedValue(newData);
+
+      const cachedSource = new CachedPriceSource(mockSource, 'DE-LU', mockStorage);
+      const result = await cachedSource.fetch(true); // Force refresh
+
+      // Should merge: existing Monday + updated/merged Tuesday + new Wednesday
+      expect(result.length).toBeGreaterThan(newData.length);
+      expect(result.some(e => e.date === today.toISOString())).toBe(true); // Monday preserved
+      expect(result.find(e => e.date === tomorrow.toISOString())?.price).toBe(0.16); // Tuesday overwritten
+      expect(result.some(e => e.date === new Date(tomorrow.getTime() + 1 * 24 * 60 * 60 * 1000).toISOString())).toBe(true); // Wednesday added
+      expect(mockSource.fetch).toHaveBeenCalledTimes(1);
+    });
+
+    test('removes old data (before today) when merging', async () => {
+      const now = Date.now();
+      const yesterday = new Date(now);
+      yesterday.setDate(yesterday.getDate() - 1);
+      yesterday.setHours(0, 0, 0, 0);
+      const today = new Date(now);
+      today.setHours(0, 0, 0, 0);
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+
+      // Existing cache with yesterday, today, and tomorrow
+      const existingData: Array<PriceDataEntry> = [
+        { date: yesterday.toISOString(), price: 0.1 }, // Old data
+        { date: today.toISOString(), price: 0.12 },
+        { date: tomorrow.toISOString(), price: 0.15 },
+      ];
+      const cached = {
+        data: existingData,
+        timestamp: now - MILLISECONDS_PER_HOUR,
+        marketArea: 'DE-LU',
+      };
+      storeValues['price_cache_DE-LU'] = cached;
+
+      // New data with today and tomorrow
+      const newData: Array<PriceDataEntry> = [
+        { date: today.toISOString(), price: 0.13 }, // Updates today
+        { date: tomorrow.toISOString(), price: 0.16 }, // Updates tomorrow
+      ];
+      (mockSource.fetch as jest.Mock).mockResolvedValue(newData);
+
+      const cachedSource = new CachedPriceSource(mockSource, 'DE-LU', mockStorage);
+      const result = await cachedSource.fetch(true); // Force refresh
+
+      // Yesterday should be removed, today and tomorrow should be updated
+      expect(result.some(e => e.date === yesterday.toISOString())).toBe(false); // Yesterday removed
+      expect(result.find(e => e.date === today.toISOString())?.price).toBe(0.13); // Today updated
+      expect(result.find(e => e.date === tomorrow.toISOString())?.price).toBe(0.16); // Tomorrow updated
+      expect(result.length).toBe(2); // Only today and tomorrow
+    });
+
+    test('extends cache with new future days', async () => {
+      const now = Date.now();
+      const today = new Date(now);
+      today.setHours(0, 0, 0, 0);
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const dayAfter = new Date(today);
+      dayAfter.setDate(dayAfter.getDate() + 2);
+
+      // Existing cache with Monday and Tuesday
+      const existingData: Array<PriceDataEntry> = [
+        { date: today.toISOString(), price: 0.1 },
+        { date: tomorrow.toISOString(), price: 0.12 },
+      ];
+      const cached = {
+        data: existingData,
+        timestamp: now - MILLISECONDS_PER_HOUR,
+        marketArea: 'DE-LU',
+      };
+      storeValues['price_cache_DE-LU'] = cached;
+
+      // New data with Tuesday and Wednesday (Tuesday gets updated, Wednesday is new)
+      const newData: Array<PriceDataEntry> = [
+        { date: tomorrow.toISOString(), price: 0.13 }, // Updates Tuesday
+        { date: dayAfter.toISOString(), price: 0.15 }, // New Wednesday
+      ];
+      (mockSource.fetch as jest.Mock).mockResolvedValue(newData);
+
+      const cachedSource = new CachedPriceSource(mockSource, 'DE-LU', mockStorage);
+      const result = await cachedSource.fetch(true); // Force refresh
+
+      // Should have Monday, updated Tuesday, and new Wednesday
+      expect(result.length).toBe(3);
+      expect(result.some(e => e.date === today.toISOString())).toBe(true); // Monday preserved
+      expect(result.find(e => e.date === tomorrow.toISOString())?.price).toBe(0.13); // Tuesday updated
+      expect(result.some(e => e.date === dayAfter.toISOString())).toBe(true); // Wednesday added
+    });
+
+    test('forceRefresh bypasses cache check but merges with existing data', async () => {
+      const now = Date.now();
+      const today = new Date(now);
+      today.setHours(0, 0, 0, 0);
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+
+      // Valid cache exists
+      const existingData: Array<PriceDataEntry> = [
+        { date: today.toISOString(), price: 0.1 },
+        { date: tomorrow.toISOString(), price: 0.12 },
+      ];
+      const cached = {
+        data: existingData,
+        timestamp: now - MILLISECONDS_PER_HOUR, // Valid cache
+        marketArea: 'DE-LU',
+      };
+      storeValues['price_cache_DE-LU'] = cached;
+
+      const newData: Array<PriceDataEntry> = [
+        { date: tomorrow.toISOString(), price: 0.15 }, // Updates tomorrow
+      ];
+      (mockSource.fetch as jest.Mock).mockResolvedValue(newData);
+
+      const cachedSource = new CachedPriceSource(mockSource, 'DE-LU', mockStorage);
+      const result = await cachedSource.fetch(true); // Force refresh
+
+      // Should fetch fresh data and merge, not return cached data directly
+      expect(mockSource.fetch).toHaveBeenCalledTimes(1);
+      expect(result.length).toBe(2); // Today + updated tomorrow
+      expect(result.find(e => e.date === tomorrow.toISOString())?.price).toBe(0.15); // Updated
+    });
   });
 });
