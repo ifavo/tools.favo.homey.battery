@@ -219,6 +219,20 @@
               "hint": {
                 "en": "Power to draw from grid for charging"
               }
+            },
+            {
+              "id": "min_home_consumption",
+              "type": "number",
+              "label": {
+                "en": "Battery Discharge from Grid Consumption (W)",
+                "de": "Batterieentladung ab Netzbezug von [W]:"
+              },
+              "value": 1000,
+              "min": 0,
+              "max": 10000,
+              "hint": {
+                "en": "Minimum grid consumption threshold for battery discharge"
+              }
             }
           ]
         },

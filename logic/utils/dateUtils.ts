@@ -11,6 +11,11 @@
 export const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
 
 /**
+ * Milliseconds in one week
+ */
+export const MILLISECONDS_PER_WEEK = 7 * MILLISECONDS_PER_DAY;
+
+/**
  * Milliseconds in one hour
  */
 export const MILLISECONDS_PER_HOUR = 60 * 60 * 1000;

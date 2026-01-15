@@ -79,6 +79,7 @@ export interface ChargingConfig {
   soc: number;        // Target SoC to charge to (%)
   gridPower: number;  // Power to draw from grid (W)
   minSoc: number;     // Minimum SoC, won't discharge below this (%)
+  minHomeConsumption: number;  // Minimum grid consumption threshold for battery discharge (W)
 }
 
 /**

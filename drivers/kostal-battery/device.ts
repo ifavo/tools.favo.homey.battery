@@ -23,6 +23,7 @@ import {
 } from '../../logic/kostalApi/scheduleBuilder';
 import type { BatteryStatus, ChargingConfig, SettingsModule } from '../../logic/kostalApi/types';
 import { SmardPriceSource } from '../../logic/lowPrice/sources/smard';
+import { CachedPriceSource, type AppStorage } from '../../logic/lowPrice/sources/cachedPriceSource';
 import type { PriceDataSource } from '../../logic/lowPrice/priceSource';
 import type { PriceBlock } from '../../logic/lowPrice/types';
 import { findCheapestBlocks } from '../../logic/lowPrice/findCheapestHours';
@@ -71,9 +72,14 @@ class KostalBatteryDevice extends Homey.Device {
     // Initialize session manager
     this.sessionManager = new SessionManager(ip, password, this);
 
-    // Initialize SMARD price source
-    this.priceSource = new SmardPriceSource('DE-LU');
-    this.log('[PRICE] Using SMARD API as price data source');
+    // Initialize SMARD price source with app-level caching (1 week TTL)
+    const marketArea = 'DE-LU';
+    const smardSource = new SmardPriceSource(marketArea);
+    // Get app storage adapter (implements AppStorage interface)
+    // Cast through unknown first to avoid TypeScript error about missing method
+    const appStorage = (this.homey.app as unknown as { getAppStorage(): AppStorage }).getAppStorage();
+    this.priceSource = new CachedPriceSource(smardSource, marketArea, appStorage);
+    this.log('[PRICE] Using SMARD API as price data source with app-level caching');
 
     // Initialize last_api_update capability with default value
     // Setting it even if it exists is safe and ensures it's visible in Homey
@@ -146,7 +152,7 @@ class KostalBatteryDevice extends Homey.Device {
       'expensive_blocks_value',
       'standard_state_value',
     ];
-    const configSettings = ['min_soc', 'max_soc', 'watts'];
+    const configSettings = ['min_soc', 'max_soc', 'watts', 'min_home_consumption'];
     const hasScheduleChange = scheduleSettings.some((s) => event.changedKeys.includes(s));
     const hasConfigChange = configSettings.some((s) => event.changedKeys.includes(s));
 
@@ -249,8 +255,9 @@ class KostalBatteryDevice extends Homey.Device {
   async setChargingOff(): Promise<void> {
     const ip = this.getSetting('ip') as string;
     const minSoc = this.getSetting('min_soc') as number || 10;
+    const minHomeConsumption = this.getSetting('min_home_consumption') as number || 5000;
 
-    const desiredSettings = buildChargingOffPayload(minSoc);
+    const desiredSettings = buildChargingOffPayload(minSoc, minHomeConsumption);
     const shouldApply = await this.isSettingsChangeNeeded(ip, desiredSettings);
     if (!shouldApply) {
       this.currentSchedule = undefined;
@@ -260,7 +267,7 @@ class KostalBatteryDevice extends Homey.Device {
     }
 
     await this.sessionManager.executeWithAuthRecovery(
-      (sessionId) => setChargingOff(ip, sessionId, minSoc),
+      (sessionId) => setChargingOff(ip, sessionId, minSoc, minHomeConsumption),
       'CHARGING_OFF',
     );
 
@@ -323,6 +330,7 @@ class KostalBatteryDevice extends Homey.Device {
       min_soc: ['Battery:MinSoc'],
       max_soc: ['EnergyMgmt:TimedBatCharge:Soc', 'EnergyMgmt:TimedBatCharge:WD_Soc'],
       watts: ['EnergyMgmt:TimedBatCharge:GridPower', 'EnergyMgmt:TimedBatCharge:WD_GridPower'],
+      min_home_consumption: ['Battery:MinHomeComsumption'],
     };
 
     const settingIds = event.changedKeys
@@ -595,6 +603,7 @@ class KostalBatteryDevice extends Homey.Device {
         soc: Number(settingsOverride.max_soc ?? this.getSetting('max_soc') ?? 80),
         gridPower: Number(settingsOverride.watts ?? this.getSetting('watts') ?? 4000),
         minSoc: Number(settingsOverride.min_soc ?? this.getSetting('min_soc') ?? 10),
+        minHomeConsumption: Number(settingsOverride.min_home_consumption ?? this.getSetting('min_home_consumption') ?? 5000),
       };
 
       // Check if schedule or config changed
@@ -602,7 +611,8 @@ class KostalBatteryDevice extends Homey.Device {
       const configChanged = !this.currentConfig
         || this.currentConfig.soc !== newConfig.soc
         || this.currentConfig.gridPower !== newConfig.gridPower
-        || this.currentConfig.minSoc !== newConfig.minSoc;
+        || this.currentConfig.minSoc !== newConfig.minSoc
+        || this.currentConfig.minHomeConsumption !== newConfig.minHomeConsumption;
 
       if (!scheduleChanged && !configChanged) {
         this.log('[SCHEDULE] No changes detected, skipping API call (avoiding solar pause)');
@@ -615,7 +625,7 @@ class KostalBatteryDevice extends Homey.Device {
       if (configChanged) changes.push('config');
       this.log(`[SCHEDULE] Changes detected: ${changes.join(', ')}`);
 
-      this.log(`[SCHEDULE] Applying to inverter... (soc=${newConfig.soc}%, power=${newConfig.gridPower}W, minSoc=${newConfig.minSoc}%)`);
+      this.log(`[SCHEDULE] Applying to inverter... (soc=${newConfig.soc}%, power=${newConfig.gridPower}W, minSoc=${newConfig.minSoc}%, minHomeConsumption=${newConfig.minHomeConsumption}W)`);
 
       const desiredSettings = buildSchedulePayload(newConfig, newSchedule);
       const shouldApply = await this.isSettingsChangeNeeded(ip, desiredSettings);

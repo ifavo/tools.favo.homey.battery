@@ -187,7 +187,7 @@ export function buildChargingOnPayload(config: ChargingConfig): SettingsModule[]
     {
       moduleid: 'devices:local',
       settings: [
-        { id: 'Battery:MinHomeComsumption', value: '50' },
+        { id: 'Battery:MinHomeComsumption', value: String(config.minHomeConsumption) },
         { id: 'Battery:MinSoc', value: String(config.minSoc) },
         { id: 'EnergyMgmt:AcStorage', value: '0' },
 
@@ -216,12 +216,12 @@ export function buildChargingOnPayload(config: ChargingConfig): SettingsModule[]
 /**
  * Build settings payload for turning grid charging OFF
  */
-export function buildChargingOffPayload(minSoc: number = 15): SettingsModule[] {
+export function buildChargingOffPayload(minSoc: number = 15, minHomeConsumption: number = 5000): SettingsModule[] {
   return [
     {
       moduleid: 'devices:local',
       settings: [
-        { id: 'Battery:MinHomeComsumption', value: '50' },
+        { id: 'Battery:MinHomeComsumption', value: String(minHomeConsumption) },
         { id: 'Battery:MinSoc', value: String(minSoc) },
         { id: 'EnergyMgmt:AcStorage', value: '0' },
         { id: 'Battery:TimeControl:Enable', value: '0' },
@@ -264,8 +264,9 @@ export async function setChargingOff(
   ip: string,
   sessionId: string,
   minSoc: number = 15,
+  minHomeConsumption: number = 5000,
 ): Promise<void> {
-  const payload = buildChargingOffPayload(minSoc);
+  const payload = buildChargingOffPayload(minSoc, minHomeConsumption);
   await kostalRequest(ip, sessionId, 'PUT', '/settings', payload);
 }
 
@@ -292,7 +293,7 @@ export function buildSchedulePayload(
     {
       moduleid: 'devices:local',
       settings: [
-        { id: 'Battery:MinHomeComsumption', value: '50' },
+        { id: 'Battery:MinHomeComsumption', value: String(config.minHomeConsumption) },
         { id: 'Battery:MinSoc', value: String(config.minSoc) },
         { id: 'EnergyMgmt:AcStorage', value: '0' },
 

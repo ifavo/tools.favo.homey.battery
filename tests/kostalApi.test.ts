@@ -125,6 +125,7 @@ describe('Kostal API Client', () => {
         soc: 80,
         gridPower: 4000,
         minSoc: 10,
+        minHomeConsumption: 5000,
       };
 
       const payload = buildChargingOnPayload(config);
@@ -138,6 +139,7 @@ describe('Kostal API Client', () => {
       expect(devicesLocal?.settings).toContainEqual({ id: 'EnergyMgmt:TimedBatCharge:Soc', value: '80' });
       expect(devicesLocal?.settings).toContainEqual({ id: 'EnergyMgmt:TimedBatCharge:GridPower', value: '4000' });
       expect(devicesLocal?.settings).toContainEqual({ id: 'Battery:MinSoc', value: '10' });
+      expect(devicesLocal?.settings).toContainEqual({ id: 'Battery:MinHomeComsumption', value: '5000' });
 
       // Check scb:system module
       const scbSystem = payload.find((m) => m.moduleid === 'scb:system');
@@ -150,6 +152,7 @@ describe('Kostal API Client', () => {
         soc: 80,
         gridPower: 4000,
         minSoc: 10,
+        minHomeConsumption: 5000,
       };
 
       const payload = buildChargingOnPayload(config);
@@ -166,7 +169,7 @@ describe('Kostal API Client', () => {
 
   describe('buildChargingOffPayload', () => {
     test('builds correct payload for turning off', () => {
-      const payload = buildChargingOffPayload(15);
+      const payload = buildChargingOffPayload(15, 5000);
 
       expect(payload).toHaveLength(2);
 
@@ -175,6 +178,7 @@ describe('Kostal API Client', () => {
       expect(devicesLocal).toBeDefined();
       expect(devicesLocal?.settings).toContainEqual({ id: 'Battery:TimeControl:Enable', value: '0' });
       expect(devicesLocal?.settings).toContainEqual({ id: 'Battery:MinSoc', value: '15' });
+      expect(devicesLocal?.settings).toContainEqual({ id: 'Battery:MinHomeComsumption', value: '5000' });
 
       // Check scb:system module
       const scbSystem = payload.find((m) => m.moduleid === 'scb:system');
@@ -187,6 +191,7 @@ describe('Kostal API Client', () => {
 
       const devicesLocal = payload.find((m) => m.moduleid === 'devices:local');
       expect(devicesLocal?.settings).toContainEqual({ id: 'Battery:MinSoc', value: '15' });
+      expect(devicesLocal?.settings).toContainEqual({ id: 'Battery:MinHomeComsumption', value: '5000' });
     });
   });
 
@@ -196,6 +201,7 @@ describe('Kostal API Client', () => {
         soc: 75,
         gridPower: 3500,
         minSoc: 10,
+        minHomeConsumption: 5000,
       };
       const schedule: DaySchedule = {
         mon: '2'.repeat(96),
@@ -213,6 +219,7 @@ describe('Kostal API Client', () => {
       expect(devicesLocal?.settings).toContainEqual({ id: 'Battery:MinSoc', value: '10' });
       expect(devicesLocal?.settings).toContainEqual({ id: 'EnergyMgmt:TimedBatCharge:Soc', value: '75' });
       expect(devicesLocal?.settings).toContainEqual({ id: 'EnergyMgmt:TimedBatCharge:GridPower', value: '3500' });
+      expect(devicesLocal?.settings).toContainEqual({ id: 'Battery:MinHomeComsumption', value: '5000' });
       expect(devicesLocal?.settings).toContainEqual({ id: 'Battery:TimeControl:ConfTue', value: schedule.tue });
       expect(devicesLocal?.settings).toContainEqual({ id: 'Battery:TimeControl:ConfWed', value: schedule.wed });
     });
