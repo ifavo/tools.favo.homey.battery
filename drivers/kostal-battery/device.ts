@@ -36,6 +36,7 @@ import {
 } from '../../logic/utils/dateUtils';
 import { detectTimeFrame, type TimeFrame } from '../../logic/utils/timeFrameDetector';
 import { isChargingFromPower } from '../../logic/utils/batteryUtils';
+import { convertPriceDataToCache } from '../../logic/utils/priceUtils';
 
 /**
  * Kostal Battery Device
@@ -744,17 +745,8 @@ class KostalBatteryDevice extends Homey.Device {
       }
 
       // Convert PriceDataEntry to PriceBlock format
-      const FIFTEEN_MINUTES_MS = 15 * 60 * 1000;
-      const priceBlocks: PriceBlock[] = [];
-      const cache: Record<string, PriceBlock> = {};
-
-      for (const entry of priceData) {
-        const start = new Date(entry.date).getTime();
-        const end = start + FIFTEEN_MINUTES_MS;
-        const block: PriceBlock = { start, end, price: entry.price };
-        priceBlocks.push(block);
-        cache[String(start)] = block;
-      }
+      const cache = convertPriceDataToCache(priceData);
+      const priceBlocks: PriceBlock[] = Object.values(cache);
 
       // Log price range
       const prices = priceBlocks.map((b) => b.price).sort((a, b) => a - b);

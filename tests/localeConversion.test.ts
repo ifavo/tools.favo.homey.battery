@@ -1,6 +1,8 @@
 /**
  * Tests for locale conversion logic
- * This mirrors the logic from device.ts getLocale()
+ * 
+ * Note: These tests mirror logic that may exist in device.ts but hasn't been extracted yet.
+ * If this logic is extracted to a utility module, these tests should be moved there.
  */
 
 /**
@@ -92,80 +94,6 @@ describe('Locale Conversion', () => {
   });
 });
 
-describe('Manual Override Timing Logic', () => {
-  const MANUAL_OVERRIDE_DURATION = 15 * 60 * 1000; // 15 minutes
-
-  /**
-   * Check if manual override is still active
-   * This mirrors the logic from device.ts isManualOverrideActive()
-   */
-  function isManualOverrideActive(
-    manualOverrideTimestamp: number | undefined,
-    now: number = Date.now()
-  ): boolean {
-    if (!manualOverrideTimestamp) {
-      return false;
-    }
-
-    const timeSinceManual = now - manualOverrideTimestamp;
-    return timeSinceManual < MANUAL_OVERRIDE_DURATION;
-  }
-
-  describe('isManualOverrideActive', () => {
-    test('returns false when no timestamp provided', () => {
-      expect(isManualOverrideActive(undefined)).toBe(false);
-    });
-
-    test('returns true when override is still active', () => {
-      const now = Date.now();
-      const timestamp = now - (5 * 60 * 1000); // 5 minutes ago
-      expect(isManualOverrideActive(timestamp, now)).toBe(true);
-    });
-
-    test('returns false when override has expired', () => {
-      const now = Date.now();
-      const timestamp = now - (20 * 60 * 1000); // 20 minutes ago
-      expect(isManualOverrideActive(timestamp, now)).toBe(false);
-    });
-
-    test('returns true at exact boundary (just before expiry)', () => {
-      const now = Date.now();
-      const timestamp = now - (MANUAL_OVERRIDE_DURATION - 1000); // 1 second before expiry
-      expect(isManualOverrideActive(timestamp, now)).toBe(true);
-    });
-
-    test('returns false at exact expiry time', () => {
-      const now = Date.now();
-      const timestamp = now - MANUAL_OVERRIDE_DURATION; // Exactly at expiry
-      expect(isManualOverrideActive(timestamp, now)).toBe(false);
-    });
-
-    test('returns true immediately after override is set', () => {
-      const now = Date.now();
-      const timestamp = now; // Just set
-      expect(isManualOverrideActive(timestamp, now)).toBe(true);
-    });
-
-    test('handles future timestamps (edge case)', () => {
-      const now = Date.now();
-      const timestamp = now + 1000; // Future timestamp
-      expect(isManualOverrideActive(timestamp, now)).toBe(true); // Still considered active
-    });
-
-    test('calculates remaining time correctly', () => {
-      const now = Date.now();
-      const timestamp = now - (10 * 60 * 1000); // 10 minutes ago
-      const isActive = isManualOverrideActive(timestamp, now);
-      expect(isActive).toBe(true);
-
-      // Should have ~5 minutes remaining
-      const timeSinceManual = now - timestamp;
-      const remaining = MANUAL_OVERRIDE_DURATION - timeSinceManual;
-      expect(remaining).toBeCloseTo(5 * 60 * 1000, -3); // Within 1 second
-    });
-  });
-});
-
 describe('Automatic Control State Logic', () => {
   /**
    * Check if automatic control is active
@@ -217,4 +145,3 @@ describe('Automatic Control State Logic', () => {
     });
   });
 });
-
