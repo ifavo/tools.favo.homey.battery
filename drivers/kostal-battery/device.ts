@@ -536,7 +536,7 @@ class KostalBatteryDevice extends Homey.Device {
     }
 
     const inverterSettingMap: Record<string, string[]> = {
-      min_soc: ['Battery:MinSoc'],
+      min_soc: ['Battery:MinSoc', 'Battery:Winter:MinSoC'],
       max_soc: ['EnergyMgmt:TimedBatCharge:Soc', 'EnergyMgmt:TimedBatCharge:WD_Soc'],
       watts: ['EnergyMgmt:TimedBatCharge:GridPower', 'EnergyMgmt:TimedBatCharge:WD_GridPower'],
       min_home_consumption: ['Battery:MinHomeComsumption'],

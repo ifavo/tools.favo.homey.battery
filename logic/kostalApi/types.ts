@@ -4,6 +4,14 @@
  */
 
 /**
+ * Setting IDs used in Kostal devices:local module
+ */
+export const BATTERY_SETTING_MINSOC = 'Battery:MinSoc';
+export const BATTERY_SETTING_WINTER_MINSOC = 'Battery:Winter:MinSoC';
+export const BATTERY_SETTING_MIN_HOME_CONSUMPTION = 'Battery:MinHomeComsumption';
+
+
+/**
  * Authentication start response from /auth/start
  */
 export interface AuthStartResponse {

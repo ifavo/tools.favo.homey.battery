@@ -9,6 +9,11 @@ import type {
   ChargingConfig,
   KostalApiError,
 } from './types';
+import {
+  BATTERY_SETTING_MIN_HOME_CONSUMPTION,
+  BATTERY_SETTING_MINSOC,
+  BATTERY_SETTING_WINTER_MINSOC,
+} from './types';
 import { type DaySchedule, SCHEDULE_VALUE_CHARGE_DISALLOW_USE } from './scheduleBuilder';
 
 /**
@@ -187,8 +192,9 @@ export function buildChargingOnPayload(config: ChargingConfig): SettingsModule[]
     {
       moduleid: 'devices:local',
       settings: [
-        { id: 'Battery:MinHomeComsumption', value: String(config.minHomeConsumption) },
-        { id: 'Battery:MinSoc', value: String(config.minSoc) },
+        { id: BATTERY_SETTING_MIN_HOME_CONSUMPTION, value: String(config.minHomeConsumption) },
+        { id: BATTERY_SETTING_MINSOC, value: String(config.minSoc) },
+        { id: BATTERY_SETTING_WINTER_MINSOC, value: String(config.minSoc) },
         { id: 'EnergyMgmt:AcStorage', value: '0' },
 
         { id: 'Battery:TimeControl:Enable', value: '1' },
@@ -221,8 +227,9 @@ export function buildChargingOffPayload(minSoc: number = 15, minHomeConsumption:
     {
       moduleid: 'devices:local',
       settings: [
-        { id: 'Battery:MinHomeComsumption', value: String(minHomeConsumption) },
-        { id: 'Battery:MinSoc', value: String(minSoc) },
+        { id: BATTERY_SETTING_MIN_HOME_CONSUMPTION, value: String(minHomeConsumption) },
+        { id: BATTERY_SETTING_MINSOC, value: String(minSoc) },
+        { id: BATTERY_SETTING_WINTER_MINSOC, value: String(minSoc) },
         { id: 'EnergyMgmt:AcStorage', value: '0' },
         { id: 'Battery:TimeControl:Enable', value: '0' },
       ],
@@ -293,8 +300,9 @@ export function buildSchedulePayload(
     {
       moduleid: 'devices:local',
       settings: [
-        { id: 'Battery:MinHomeComsumption', value: String(config.minHomeConsumption) },
-        { id: 'Battery:MinSoc', value: String(config.minSoc) },
+        { id: BATTERY_SETTING_MIN_HOME_CONSUMPTION, value: String(config.minHomeConsumption) },
+        { id: BATTERY_SETTING_MINSOC, value: String(config.minSoc) },
+        { id: BATTERY_SETTING_WINTER_MINSOC, value: String(config.minSoc) },
         { id: 'EnergyMgmt:AcStorage', value: '0' },
 
         { id: 'Battery:TimeControl:Enable', value: '1' },
