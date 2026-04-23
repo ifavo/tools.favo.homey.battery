@@ -139,6 +139,13 @@ describe('SessionManager', () => {
       expect(sessionManager.isAuthError(error)).toBe(true);
     });
 
+    test('returns true for Kostal 400 authentication failed message', () => {
+      const sessionManager = new SessionManager('192.168.1.100', 'password', mockStorage);
+      const error = new Error('Kostal API error 400: {"message":"authentication failed"}');
+
+      expect(sessionManager.isAuthError(error)).toBe(true);
+    });
+
     test('returns false for other errors', () => {
       const sessionManager = new SessionManager('192.168.1.100', 'password', mockStorage);
       const error = { statusCode: 500 };

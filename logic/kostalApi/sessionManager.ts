@@ -121,7 +121,15 @@ export class SessionManager {
 
     // Also check error message
     const message = error instanceof Error ? error.message : String(error);
-    return message.includes('401') || message.includes('403') || message.includes('Unauthorized');
+    const normalized = message.toLowerCase();
+    // Kostal sometimes returns 400 with a body like {"message":"authentication failed"}
+    // (wrapped into the thrown Error message by apiClient.ts).
+    return (
+      normalized.includes('401')
+      || normalized.includes('403')
+      || normalized.includes('unauthorized')
+      || normalized.includes('authentication failed')
+    );
   }
 
   /**
